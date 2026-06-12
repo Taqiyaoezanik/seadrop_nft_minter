@@ -40,7 +40,11 @@ export async function estimateGas(
   logger.info(`[GAS] Estimated gas: ${gasLimit}, maxFeePerGas: ${maxFeePerGas}, total: ${totalGasCostEth} ETH`);
 
   // Check against user max gas setting
-  const userMaxGasWei = BigInt(Math.floor(parseFloat(userMaxGasEth) * 1e18));
+  const parsedMaxGas = parseFloat(userMaxGasEth);
+  if (isNaN(parsedMaxGas) || parsedMaxGas <= 0) {
+    throw new Error(`Invalid max gas setting: ${userMaxGasEth}`);
+  }
+  const userMaxGasWei = BigInt(Math.floor(parsedMaxGas * 1e18));
   if (totalGasCostWei > userMaxGasWei) {
     throw new Error(
       `Estimated gas cost (${totalGasCostEth} ETH) exceeds your max gas limit (${userMaxGasEth} ETH). ` +

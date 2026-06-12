@@ -136,7 +136,8 @@ export async function runMintJob(
       }
 
       const mintPriceEth = formatEther(mintConfig.publicDrop.mintPrice);
-      const userMaxPriceWei = BigInt(Math.floor(parseFloat(userSettings.max_mint_price_eth) * 1e18));
+      const parsedMaxPrice = parseFloat(userSettings.max_mint_price_eth);
+      const userMaxPriceWei = BigInt(Math.floor((isNaN(parsedMaxPrice) ? 0 : parsedMaxPrice) * 1e18));
       if (mintConfig.publicDrop.mintPrice > userMaxPriceWei) {
         walletPool.releaseWallet(wallet.address);
         return fail(

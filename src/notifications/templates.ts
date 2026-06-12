@@ -1,4 +1,4 @@
-import type { Address } from 'viem';
+// No external imports needed
 
 function shortAddress(address: string): string {
   return `${address.slice(0, 6)}...${address.slice(-4)}`;

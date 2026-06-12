@@ -61,13 +61,27 @@ export async function resolveCollection(parsed: ParsedUrl): Promise<CollectionIn
     'Accept': 'application/json',
   };
 
+  // Type B: contract address already in URL — skip OpenSea API, go straight to chain
   if (parsed.type === 'contract' && parsed.contractAddress) {
-    return {
-      contractAddress: parsed.contractAddress,
-      collectionName: 'Unknown Collection',
-      collectionSlug: '',
-      totalSupply: null,
-    };
+    // Try to get collection name from OpenSea by contract address
+    try {
+      const url = `${config.opensea.baseUrl}/api/v2/chain/ethereum/contract/${parsed.contractAddress}`;
+      const data = await fetchWithRetry<{ collection: string; name?: string }>(url, headers);
+      return {
+        contractAddress: parsed.contractAddress,
+        collectionName: data.name ?? data.collection ?? 'Unknown Collection',
+        collectionSlug: data.collection ?? '',
+        totalSupply: null,
+      };
+    } catch {
+      // If lookup fails, proceed with address only
+      return {
+        contractAddress: parsed.contractAddress,
+        collectionName: 'Unknown Collection',
+        collectionSlug: '',
+        totalSupply: null,
+      };
+    }
   }
 
   if (!parsed.slug) {

@@ -22,9 +22,8 @@ export function getOrCreateUser(telegramId: string, username?: string): User {
   if (existing) {
     if (username && existing.username !== username) {
       db.prepare('UPDATE users SET username = ? WHERE telegram_id = ?').run(username, telegramId);
-      existing.username = username;
     }
-    return existing;
+    return db.prepare('SELECT * FROM users WHERE telegram_id = ?').get(telegramId) as User;
   }
 
   db.prepare(

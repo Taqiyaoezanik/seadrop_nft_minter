@@ -18,10 +18,11 @@ export function rateLimitMint(): MiddlewareFn<Context> {
     );
 
     if (timestamps.length >= max) {
-      const resetIn = Math.ceil((timestamps[0]! + windowMs - now) / 1000);
+      const oldestTimestamp = timestamps[0] ?? now;
+      const resetIn = Math.ceil((oldestTimestamp + windowMs - now) / 1000);
       logger.warn(`[RATE_LIMIT] User ${telegramId} rate limited`);
       await ctx.reply(
-        `\u23f3 <b>Rate limit reached.</b>\n\nYou can send up to ${max} mint requests per ${windowMs / 1000}s.\nTry again in <b>${resetIn}s</b>.`,
+        `\u23f3 <b>Rate limit reached.</b>\n\nYou can send up to ${max} mint requests per ${windowMs / 1000}s.\nTry again in <b>${resetIn > 0 ? resetIn : 1}s</b>.`,
         { parse_mode: 'HTML' }
       );
       return;
