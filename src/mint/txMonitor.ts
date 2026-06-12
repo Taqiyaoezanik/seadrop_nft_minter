@@ -1,5 +1,5 @@
 import { publicClient } from '../rpc/client';
-import { formatEther, parseAbiItem } from 'viem';
+import { formatEther } from 'viem';
 import { config } from '../config';
 import { logger } from '../utils/logger';
 import type { Address } from 'viem';
@@ -13,7 +13,8 @@ export interface TxMonitorResult {
   blockNumber?: bigint;
 }
 
-const TRANSFER_EVENT = parseAbiItem('event Transfer(address indexed from, address indexed to, uint256 indexed tokenId)');
+// ERC721 Transfer event topic0
+const TRANSFER_TOPIC = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
 
 export async function monitorTransaction(
   txHash: `0x${string}`,
@@ -41,21 +42,20 @@ export async function monitorTransaction(
           };
         }
 
-        // Parse Transfer events to extract tokenIds
+        // Parse Transfer(from, to, tokenId) events — tokenId is topics[3]
         const tokenIds: string[] = [];
         for (const log of receipt.logs) {
-          if (log.address.toLowerCase() === nftContractAddress.toLowerCase()) {
+          if (
+            log.address.toLowerCase() === nftContractAddress.toLowerCase() &&
+            log.topics[0]?.toLowerCase() === TRANSFER_TOPIC &&
+            log.topics.length >= 4 &&
+            log.topics[3]
+          ) {
             try {
-              const decoded = publicClient.decodeEventLog ? 
-                { eventName: 'Transfer', args: { tokenId: BigInt(log.topics[3] ?? '0x0') } } :
-                null;
-              // Manual decode: Transfer(from, to, tokenId) - tokenId is topics[3]
-              if (log.topics.length >= 4 && log.topics[3]) {
-                const tokenId = BigInt(log.topics[3]).toString();
-                tokenIds.push(tokenId);
-              }
+              const tokenId = BigInt(log.topics[3]).toString();
+              tokenIds.push(tokenId);
             } catch {
-              // skip malformed logs
+              // skip malformed log
             }
           }
         }

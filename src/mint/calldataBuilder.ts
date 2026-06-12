@@ -1,4 +1,4 @@
-import { encodeFunctionData, parseEther } from 'viem';
+import { encodeFunctionData } from 'viem';
 import type { Address } from 'viem';
 import SeaDropV1Abi from '../../abis/SeaDropV1.json';
 import type { MintConfig } from './mintConfigReader';
@@ -21,7 +21,7 @@ export function buildMintCalldata(
     args: [
       nftContractAddress,
       feeRecipient,
-      '0x0000000000000000000000000000000000000000' as Address, // minterIfNotPayer = address(0)
+      '0x0000000000000000000000000000000000000000' as Address,
       BigInt(quantity),
     ],
   });

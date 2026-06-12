@@ -1,22 +1,22 @@
-import { formatEther } from 'viem';
 import { walletPool } from './pool';
 import { config } from '../config';
 import { logger } from '../utils/logger';
 import { notifyLowBalance } from '../notifications/templates';
-import type { Telegraf } from 'telegraf';
-import type { Update } from 'telegraf/types';
+import type { Telegraf, Context } from 'telegraf';
 
-const CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+const CHECK_INTERVAL_MS = 5 * 60 * 1000;
 
 let intervalHandle: ReturnType<typeof setInterval> | null = null;
-let botInstance: Telegraf<Update & { message: { text: string } }> | null = null;
+let botInstance: Telegraf<Context> | null = null;
 
-export function startBalanceChecker(bot: Telegraf<Update & { message: { text: string } }>): void {
-  botInstance = bot as unknown as typeof botInstance;
+export function startBalanceChecker(bot: Telegraf<Context>): void {
+  botInstance = bot;
   if (intervalHandle) return;
 
-  intervalHandle = setInterval(async () => {
-    await checkBalances();
+  intervalHandle = setInterval(() => {
+    checkBalances().catch((err) => {
+      logger.error(`[BALANCE] Interval check error: ${err instanceof Error ? err.message : 'unknown'}`);
+    });
   }, CHECK_INTERVAL_MS);
 
   logger.info('[BALANCE] Balance checker started (interval: 5 min)');
@@ -45,8 +45,11 @@ export async function checkBalances(): Promise<void> {
           thresholdEth: threshold,
         });
         try {
-          await (botInstance as unknown as { telegram: { sendMessage: (id: string, msg: string, opts: Record<string, unknown>) => Promise<void> } })
-            .telegram.sendMessage(config.telegram.adminTelegramId, message, { parse_mode: 'HTML' });
+          await botInstance.telegram.sendMessage(
+            config.telegram.adminTelegramId,
+            message,
+            { parse_mode: 'HTML' }
+          );
         } catch (sendErr) {
           logger.error(`[BALANCE] Failed to send low balance notification: ${sendErr instanceof Error ? sendErr.message : 'unknown'}`);
         }

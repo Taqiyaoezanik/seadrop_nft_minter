@@ -3,7 +3,7 @@ import { mainnet } from 'viem/chains';
 import { config } from '../config';
 import { logger } from '../utils/logger';
 
-const REQUEST_DELAY_MS = 50; // ~20 req/sec to respect Alchemy free tier
+const REQUEST_DELAY_MS = 50;
 
 let lastRequestTime = 0;
 
@@ -17,11 +17,9 @@ async function throttle(): Promise<void> {
 }
 
 const primaryTransport = http(config.rpc.primaryRpcUrl, {
-  onFetchRequest: async () => {
-    await throttle();
-  },
   retryCount: 2,
   retryDelay: 1000,
+  fetchOptions: {},
 });
 
 const backupTransport = http(config.rpc.backupRpcUrl, {
@@ -31,13 +29,7 @@ const backupTransport = http(config.rpc.backupRpcUrl, {
 
 export const publicClient: PublicClient = createPublicClient({
   chain: mainnet,
-  transport: fallback([primaryTransport, backupTransport], {
-    onResponse: (response) => {
-      if (response.transport.config.url === config.rpc.backupRpcUrl) {
-        logger.warn('[RPC] Primary RPC failed, using backup RPC');
-      }
-    },
-  }),
+  transport: fallback([primaryTransport, backupTransport]),
 });
 
 export async function getLatestBaseFee(): Promise<bigint> {
@@ -51,3 +43,5 @@ export async function getLatestBaseFee(): Promise<bigint> {
 export async function getEthBalance(address: `0x${string}`): Promise<bigint> {
   return publicClient.getBalance({ address });
 }
+
+export { throttle };

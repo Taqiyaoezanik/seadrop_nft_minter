@@ -24,7 +24,7 @@ async function main(): Promise<void> {
   await initWorker(bot);
 
   // Start balance checker
-  startBalanceChecker(bot as never);
+  startBalanceChecker(bot);
 
   // Graceful shutdown
   process.once('SIGINT', () => {

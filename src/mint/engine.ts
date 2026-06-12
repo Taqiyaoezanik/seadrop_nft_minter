@@ -15,7 +15,6 @@ import { logAction } from '../db/auditLogs';
 import { getUserSettings } from '../db/users';
 import { config } from '../config';
 import { logger } from '../utils/logger';
-import type { Address } from 'viem';
 
 export interface MintJobInput {
   telegramId: string;
@@ -48,7 +47,6 @@ export async function runMintJob(
   logger.info(`[ENGINE] Starting mint job ${jobId} for user ${telegramId}`);
   logAction(telegramId, 'MINT_START', { jobId, url });
 
-  // Create job in DB
   createJob({ id: jobId, telegram_id: telegramId });
 
   const fail = async (reason: string): Promise<MintEngineResult> => {
@@ -80,7 +78,7 @@ export async function runMintJob(
       contract_address: collection.contractAddress,
     });
 
-    // Step 3: Risk validation (blacklist, etherscan, goplus)
+    // Step 3: Risk validation
     const validationError = await validateMint(collection.contractAddress, telegramId);
     if (validationError) {
       return fail(validationError);
@@ -118,15 +116,21 @@ export async function runMintJob(
 
       // Step 7: Validate mint conditions
       const now = BigInt(Math.floor(Date.now() / 1000));
+
       if (mintConfig.publicDrop.startTime > now) {
         walletPool.releaseWallet(wallet.address);
-        return fail(`Mint has not started yet. Starts at ${new Date(Number(mintConfig.publicDrop.startTime) * 1000).toUTCString()}`);
+        return fail(
+          `Mint has not started yet. Starts at ${new Date(Number(mintConfig.publicDrop.startTime) * 1000).toUTCString()}`
+        );
       }
       if (mintConfig.publicDrop.endTime > 0n && mintConfig.publicDrop.endTime < now) {
         walletPool.releaseWallet(wallet.address);
         return fail('Mint has ended');
       }
-      if (mintConfig.mintStats.maxSupply > 0n && mintConfig.mintStats.currentTotalSupply >= mintConfig.mintStats.maxSupply) {
+      if (
+        mintConfig.mintStats.maxSupply > 0n &&
+        mintConfig.mintStats.currentTotalSupply >= mintConfig.mintStats.maxSupply
+      ) {
         walletPool.releaseWallet(wallet.address);
         return fail('Mint supply is exhausted');
       }
@@ -135,17 +139,23 @@ export async function runMintJob(
       const userMaxPriceWei = BigInt(Math.floor(parseFloat(userSettings.max_mint_price_eth) * 1e18));
       if (mintConfig.publicDrop.mintPrice > userMaxPriceWei) {
         walletPool.releaseWallet(wallet.address);
-        return fail(`Mint price (${mintPriceEth} ETH) exceeds your max price limit (${userSettings.max_mint_price_eth} ETH). Use /set_maxprice to increase.`);
+        return fail(
+          `Mint price (${mintPriceEth} ETH) exceeds your max price limit (${userSettings.max_mint_price_eth} ETH). Use /set_maxprice to increase.`
+        );
       }
 
-      const remainingMints = mintConfig.publicDrop.maxTotalMintableByWallet - Number(mintConfig.mintStats.minterNumMinted);
-      const quantity = Math.min(userSettings.quantity, remainingMints > 0 ? remainingMints : userSettings.quantity);
+      const remainingMints =
+        mintConfig.publicDrop.maxTotalMintableByWallet - Number(mintConfig.mintStats.minterNumMinted);
+      const quantity = Math.min(
+        userSettings.quantity,
+        remainingMints > 0 ? remainingMints : userSettings.quantity
+      );
       if (quantity <= 0) {
         walletPool.releaseWallet(wallet.address);
         return fail('Wallet has already reached the max mint limit for this collection');
       }
 
-      updateJobStatus(jobId, 'PROCESSING', { mint_price_eth: mintPriceEth, quantity });
+      updateJobStatus(jobId, 'PROCESSING', { mint_price_eth: mintPriceEth });
 
       // Step 8: Build calldata
       const calldata = buildMintCalldata(mintConfig, quantity);
@@ -159,7 +169,7 @@ export async function runMintJob(
         return fail(err instanceof Error ? err.message : 'Gas estimation failed');
       }
 
-      // Step 10: Send transaction
+      // Step 10: Get private key and send tx
       const privateKey = walletPool.getPrivateKey(wallet.address);
       if (!privateKey) {
         walletPool.releaseWallet(wallet.address);
@@ -204,13 +214,17 @@ export async function runMintJob(
       } else {
         updateJobStatus(jobId, monitorResult.status, {
           tx_hash: txHash,
-          error_message: monitorResult.status === 'DROPPED' ? 'Transaction timed out' : 'Transaction reverted',
+          error_message:
+            monitorResult.status === 'DROPPED' ? 'Transaction timed out' : 'Transaction reverted',
         });
         return {
           jobId,
           status: monitorResult.status,
           txHash,
-          errorMessage: monitorResult.status === 'DROPPED' ? 'Transaction timed out' : 'Transaction reverted on-chain',
+          errorMessage:
+            monitorResult.status === 'DROPPED'
+              ? 'Transaction timed out'
+              : 'Transaction reverted on-chain',
           collectionName: collection.collectionName,
         };
       }
