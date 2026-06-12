@@ -1,0 +1,22 @@
+[
+  {
+    "name": "supportsInterface",
+    "type": "function",
+    "stateMutability": "view",
+    "inputs": [
+      { "name": "interfaceId", "type": "bytes4" }
+    ],
+    "outputs": [
+      { "name": "", "type": "bool" }
+    ]
+  },
+  {
+    "name": "getAllowedSeaDrop",
+    "type": "function",
+    "stateMutability": "view",
+    "inputs": [],
+    "outputs": [
+      { "name": "", "type": "address[]" }
+    ]
+  }
+]

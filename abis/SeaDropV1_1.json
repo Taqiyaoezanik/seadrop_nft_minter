@@ -1,0 +1,61 @@
+[
+  {
+    "name": "mintPublic",
+    "type": "function",
+    "stateMutability": "payable",
+    "inputs": [
+      { "name": "nftContract", "type": "address" },
+      { "name": "feeRecipient", "type": "address" },
+      { "name": "minterIfNotPayer", "type": "address" },
+      { "name": "quantity", "type": "uint256" }
+    ],
+    "outputs": []
+  },
+  {
+    "name": "getPublicDrop",
+    "type": "function",
+    "stateMutability": "view",
+    "inputs": [
+      { "name": "nftContract", "type": "address" }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "tuple",
+        "components": [
+          { "name": "mintPrice", "type": "uint80" },
+          { "name": "startTime", "type": "uint48" },
+          { "name": "endTime", "type": "uint48" },
+          { "name": "maxTotalMintableByWallet", "type": "uint16" },
+          { "name": "feeBps", "type": "uint16" },
+          { "name": "restrictFeeRecipients", "type": "bool" }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "getMintStats",
+    "type": "function",
+    "stateMutability": "view",
+    "inputs": [
+      { "name": "nftContract", "type": "address" },
+      { "name": "minter", "type": "address" }
+    ],
+    "outputs": [
+      { "name": "minterNumMinted", "type": "uint256" },
+      { "name": "currentTotalSupply", "type": "uint256" },
+      { "name": "maxSupply", "type": "uint256" }
+    ]
+  },
+  {
+    "name": "getFeeRecipients",
+    "type": "function",
+    "stateMutability": "view",
+    "inputs": [
+      { "name": "nftContract", "type": "address" }
+    ],
+    "outputs": [
+      { "name": "", "type": "address[]" }
+    ]
+  }
+]
