@@ -11,9 +11,12 @@ async function tryInitBullMQ(): Promise<void> {
   if (!config.redis.url || _bullQueueInitialized) return;
   try {
     const { Queue } = await import('bullmq');
+    const redisUrl = new URL(config.redis.url!);
     new Queue('mint-jobs', {
       connection: {
-        url: config.redis.url,
+        host: redisUrl.hostname,
+        port: parseInt(redisUrl.port || '6379', 10),
+        password: redisUrl.password || undefined,
         maxRetriesPerRequest: null,
       },
     });
