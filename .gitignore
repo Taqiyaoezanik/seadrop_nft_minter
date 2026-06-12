@@ -1,0 +1,31 @@
+# Environment — NEVER commit this
+.env
+
+# Database files
+*.db
+*.db-shm
+*.db-wal
+
+# Build output
+dist/
+
+# Dependencies
+node_modules/
+
+# Logs
+logs/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Temp
+tmp/
+.tmp/
