@@ -24,8 +24,7 @@ export async function sendMintTransaction(
   });
 
   logger.info(
-    `[TX] Sending mint tx from ${account.address.slice(0, 8)}... ` +
-    `value: ${formatEther(calldata.value)} ETH`
+    `[TX] Sending mint tx from ${account.address.slice(0, 8)}... value=${formatEther(calldata.value)} ETH`
   );
 
   const txHash = await walletClient.sendTransaction({

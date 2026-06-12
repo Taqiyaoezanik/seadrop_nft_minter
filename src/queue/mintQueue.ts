@@ -39,20 +39,20 @@ export async function initQueue(): Promise<void> {
 }
 
 export async function addMintJob(
-  input: MintJobInput
-): Promise<void> {
-  logger.info(`[QUEUE] Adding mint job ${input.jobId} for user ${input.telegramId}`);
+  input: Omit<MintJobInput, 'jobId'> & { jobId: string },
+  jobId: string
+): Promise<string> {
+  logger.info(`[QUEUE] Adding mint job ${jobId} for user ${input.telegramId}`);
 
   pQueue.add(async () => {
     try {
-      const result = await runMintJob(input);
+      const result = await runMintJob({ ...input, jobId });
       if (notifyCallback) {
         await notifyCallback(input.telegramId, result);
       }
     } catch (err) {
       logger.error(
-        `[QUEUE] Unhandled error in mint job ${input.jobId}: ` +
-        `${err instanceof Error ? err.message : 'unknown'}`
+        `[QUEUE] Unhandled error in mint job ${jobId}: ${err instanceof Error ? err.message : 'unknown'}`
       );
     }
   }).catch((err: unknown) => {
@@ -60,6 +60,8 @@ export async function addMintJob(
       `[QUEUE] Failed to add job to queue: ${err instanceof Error ? err.message : 'unknown'}`
     );
   });
+
+  return jobId;
 }
 
 export function getQueueStats(): { pending: number; active: number } {

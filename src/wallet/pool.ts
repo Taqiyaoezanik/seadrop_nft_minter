@@ -29,6 +29,7 @@ class WalletPool {
     const keys = config.walletKeys;
     if (keys.length === 0) {
       logger.warn('[WALLET] No wallet keys found in config. At least WALLET_1_KEY is required.');
+      this.initialized = true;
       return;
     }
 
@@ -53,7 +54,14 @@ class WalletPool {
     this.initialized = true;
   }
 
+  private ensureInitialized(): void {
+    if (!this.initialized) {
+      this.init();
+    }
+  }
+
   public acquireWallet(): WalletEntry | null {
+    this.ensureInitialized();
     // TODO LOW: implement round-robin to distribute load across wallets
     for (const [, wallet] of this.wallets) {
       if (wallet.status === 'IDLE') {
@@ -75,6 +83,7 @@ class WalletPool {
   }
 
   public getPoolStatus(): WalletInfo[] {
+    this.ensureInitialized();
     return Array.from(this.wallets.values()).map((w) => ({
       address: w.address,
       status: w.status,
@@ -83,14 +92,17 @@ class WalletPool {
   }
 
   public getWalletCount(): number {
+    this.ensureInitialized();
     return this.wallets.size;
   }
 
   public getIdleCount(): number {
+    this.ensureInitialized();
     return Array.from(this.wallets.values()).filter((w) => w.status === 'IDLE').length;
   }
 
   public async updateBalances(): Promise<void> {
+    this.ensureInitialized();
     for (const [, wallet] of this.wallets) {
       try {
         wallet.balanceWei = await getEthBalance(wallet.address);
@@ -104,6 +116,7 @@ class WalletPool {
   }
 
   public getLowBalanceWallets(thresholdEth: string): WalletInfo[] {
+    this.ensureInitialized();
     const threshold = parseEther(thresholdEth);
     return Array.from(this.wallets.values())
       .filter((w) => w.balanceWei < threshold)

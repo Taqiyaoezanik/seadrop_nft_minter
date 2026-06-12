@@ -29,7 +29,6 @@ export async function mintCommand(ctx: Context): Promise<void> {
     return;
   }
 
-  // Validate URL format early before queuing
   try {
     parseOpenSeaUrl(url);
   } catch (err) {
@@ -46,7 +45,7 @@ export async function mintCommand(ctx: Context): Promise<void> {
     quantity: config.mint.defaultQuantity,
   });
 
-  // Create job here — single source of truth for jobId
+  // Single source of truth for jobId — created here, passed to engine
   const jobId = uuidv4();
   createJob({ id: jobId, telegram_id: telegramId });
 
@@ -66,8 +65,7 @@ export async function mintCommand(ctx: Context): Promise<void> {
     { parse_mode: 'HTML' }
   );
 
-  // Pass jobId to engine — engine does NOT create its own job
-  await addMintJob({ telegramId, url, jobId });
+  await addMintJob({ telegramId, url, jobId }, jobId);
 }
 
 export async function statusCommand(ctx: Context): Promise<void> {
@@ -133,15 +131,37 @@ export async function cancelCommand(ctx: Context): Promise<void> {
     return;
   }
 
-  const { cancelJob } = await import('../../db/mintJobs');
-  const cancelled = cancelJob(jobId, telegramId);
+  const { cancelJob, getJob } = await import('../../db/mintJobs');
 
+  const job = getJob(jobId);
+  if (!job || job.telegram_id !== telegramId) {
+    await ctx.reply('\u274c Job not found or does not belong to you.');
+    return;
+  }
+
+  if (job.status === 'PROCESSING') {
+    await ctx.reply(
+      `\u26a0\ufe0f Job <code>${jobId.slice(0, 8)}</code> is currently being processed and cannot be cancelled.`,
+      { parse_mode: 'HTML' }
+    );
+    return;
+  }
+
+  if (job.status !== 'PENDING') {
+    await ctx.reply(
+      `\u274c Job <code>${jobId.slice(0, 8)}</code> has already completed with status: <b>${job.status}</b>.`,
+      { parse_mode: 'HTML' }
+    );
+    return;
+  }
+
+  const cancelled = cancelJob(jobId, telegramId);
   if (cancelled) {
     await ctx.reply(
       `\u2705 Job <code>${jobId.slice(0, 8)}</code> has been cancelled.`,
       { parse_mode: 'HTML' }
     );
   } else {
-    await ctx.reply('\u274c Job not found, not yours, or already processing/completed.');
+    await ctx.reply('\u274c Failed to cancel job. Please try again.');
   }
 }
