@@ -5,16 +5,17 @@ import { updateJobStatus, getJob } from '../db/mintJobs';
 import { runMintJob } from '../mint/engine';
 import type { MintJobInput, MintEngineResult } from '../mint/engine';
 
-let bullQueue: unknown = null;
+// BullMQ is optional — only used if Redis is configured
+let _bullQueueInitialized = false;
 
-// Try to init BullMQ if Redis is configured
 async function tryInitBullMQ(): Promise<void> {
-  if (!config.redis.url) return;
+  if (!config.redis.url || _bullQueueInitialized) return;
   try {
     const { Queue } = await import('bullmq');
     const { default: IORedis } = await import('ioredis');
     const connection = new IORedis(config.redis.url, { maxRetriesPerRequest: null });
-    bullQueue = new Queue('mint-jobs', { connection });
+    new Queue('mint-jobs', { connection });
+    _bullQueueInitialized = true;
     logger.info('[QUEUE] BullMQ initialized with Redis persistence');
   } catch (err) {
     logger.warn(`[QUEUE] BullMQ init failed, using p-queue only: ${err instanceof Error ? err.message : 'unknown'}`);
@@ -51,6 +52,8 @@ export async function addMintJob(
     } catch (err) {
       logger.error(`[QUEUE] Unhandled error in mint job: ${err instanceof Error ? err.message : 'unknown'}`);
     }
+  }).catch((err: unknown) => {
+    logger.error(`[QUEUE] Failed to add job to queue: ${err instanceof Error ? err.message : 'unknown'}`);
   });
 
   return jobId ?? 'queued';
