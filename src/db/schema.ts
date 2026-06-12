@@ -54,3 +54,10 @@ BEGIN
   UPDATE mint_jobs SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
 END
 `;
+
+// Indexes for performance
+export const CREATE_INDEXES = `
+CREATE INDEX IF NOT EXISTS idx_mint_jobs_telegram_id ON mint_jobs(telegram_id);
+CREATE INDEX IF NOT EXISTS idx_mint_jobs_status ON mint_jobs(status);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_telegram_id ON audit_logs(telegram_id);
+`;

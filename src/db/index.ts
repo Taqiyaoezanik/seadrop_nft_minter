@@ -7,6 +7,7 @@ import {
   CREATE_BLACKLIST_TABLE,
   CREATE_AUDIT_LOGS_TABLE,
   CREATE_UPDATED_AT_TRIGGER,
+  CREATE_INDEXES,
 } from './schema';
 import { logger } from '../utils/logger';
 
@@ -28,6 +29,7 @@ function initializeSchema(): void {
   db.exec(CREATE_BLACKLIST_TABLE);
   db.exec(CREATE_AUDIT_LOGS_TABLE);
   db.exec(CREATE_UPDATED_AT_TRIGGER);
+  db.exec(CREATE_INDEXES);
   logger.info('[DB] Schema initialized successfully');
 }
 

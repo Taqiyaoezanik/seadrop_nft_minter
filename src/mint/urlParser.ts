@@ -1,3 +1,4 @@
+import { getAddress } from 'viem';
 import type { Address } from 'viem';
 
 export type ParsedUrlType = 'slug' | 'contract';
@@ -34,14 +35,21 @@ export function parseOpenSeaUrl(raw: string): ParsedUrl {
 
   const assetsMatch = OPENSEA_ASSETS_REGEX.exec(trimmed);
   if (assetsMatch) {
-    const contractAddress = assetsMatch[2] as Address;
-    if (!contractAddress) throw new Error('Could not extract contract address from URL');
+    const rawAddress = assetsMatch[2];
+    if (!rawAddress) throw new Error('Could not extract contract address from URL');
+    // Checksum address (EIP-55) — viem will reject non-checksummed addresses
+    let contractAddress: Address;
+    try {
+      contractAddress = getAddress(rawAddress);
+    } catch {
+      throw new Error(`Invalid contract address in URL: ${rawAddress}`);
+    }
     return { type: 'contract', contractAddress, raw: trimmed };
   }
 
   throw new Error(
     'Unsupported OpenSea URL format. Use:\n' +
-    '• https://opensea.io/collection/{slug}\n' +
-    '• https://opensea.io/assets/ethereum/{contract}/{tokenId}'
+    '\u2022 https://opensea.io/collection/{slug}\n' +
+    '\u2022 https://opensea.io/assets/ethereum/{contract}/{tokenId}'
   );
 }

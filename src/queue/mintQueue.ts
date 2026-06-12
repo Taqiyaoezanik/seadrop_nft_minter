@@ -5,7 +5,6 @@ import { updateJobStatus, getJob } from '../db/mintJobs';
 import { runMintJob } from '../mint/engine';
 import type { MintJobInput, MintEngineResult } from '../mint/engine';
 
-// BullMQ is optional — only used if Redis is configured
 let _bullQueueInitialized = false;
 
 async function tryInitBullMQ(): Promise<void> {
@@ -18,7 +17,9 @@ async function tryInitBullMQ(): Promise<void> {
     _bullQueueInitialized = true;
     logger.info('[QUEUE] BullMQ initialized with Redis persistence');
   } catch (err) {
-    logger.warn(`[QUEUE] BullMQ init failed, using p-queue only: ${err instanceof Error ? err.message : 'unknown'}`);
+    logger.warn(
+      `[QUEUE] BullMQ init failed, using p-queue only: ${err instanceof Error ? err.message : 'unknown'}`
+    );
   }
 }
 
@@ -38,10 +39,9 @@ export async function initQueue(): Promise<void> {
 }
 
 export async function addMintJob(
-  input: MintJobInput,
-  jobId?: string
-): Promise<string> {
-  logger.info(`[QUEUE] Adding mint job for user ${input.telegramId}`);
+  input: MintJobInput
+): Promise<void> {
+  logger.info(`[QUEUE] Adding mint job ${input.jobId} for user ${input.telegramId}`);
 
   pQueue.add(async () => {
     try {
@@ -50,13 +50,16 @@ export async function addMintJob(
         await notifyCallback(input.telegramId, result);
       }
     } catch (err) {
-      logger.error(`[QUEUE] Unhandled error in mint job: ${err instanceof Error ? err.message : 'unknown'}`);
+      logger.error(
+        `[QUEUE] Unhandled error in mint job ${input.jobId}: ` +
+        `${err instanceof Error ? err.message : 'unknown'}`
+      );
     }
   }).catch((err: unknown) => {
-    logger.error(`[QUEUE] Failed to add job to queue: ${err instanceof Error ? err.message : 'unknown'}`);
+    logger.error(
+      `[QUEUE] Failed to add job to queue: ${err instanceof Error ? err.message : 'unknown'}`
+    );
   });
-
-  return jobId ?? 'queued';
 }
 
 export function getQueueStats(): { pending: number; active: number } {

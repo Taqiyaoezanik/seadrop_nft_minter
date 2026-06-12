@@ -23,7 +23,10 @@ export async function sendMintTransaction(
     transport: http(config.rpc.primaryRpcUrl),
   });
 
-  logger.info(`[TX] Sending mint tx from ${account.address.slice(0, 8)}... value: ${formatEther(calldata.value)} ETH`);
+  logger.info(
+    `[TX] Sending mint tx from ${account.address.slice(0, 8)}... ` +
+    `value: ${formatEther(calldata.value)} ETH`
+  );
 
   const txHash = await walletClient.sendTransaction({
     to: calldata.to,

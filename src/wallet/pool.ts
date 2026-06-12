@@ -43,7 +43,9 @@ class WalletPool {
           balanceWei: 0n,
         });
       } catch (err) {
-        logger.error(`[WALLET] Failed to load wallet key: ${err instanceof Error ? err.message : 'unknown error'}`);
+        logger.error(
+          `[WALLET] Failed to load wallet key: ${err instanceof Error ? err.message : 'unknown error'}`
+        );
       }
     }
 
@@ -52,6 +54,7 @@ class WalletPool {
   }
 
   public acquireWallet(): WalletEntry | null {
+    // TODO LOW: implement round-robin to distribute load across wallets
     for (const [, wallet] of this.wallets) {
       if (wallet.status === 'IDLE') {
         wallet.status = 'BUSY';
@@ -92,7 +95,10 @@ class WalletPool {
       try {
         wallet.balanceWei = await getEthBalance(wallet.address);
       } catch (err) {
-        logger.error(`[WALLET] Failed to fetch balance for ${wallet.address.slice(0, 8)}...: ${err instanceof Error ? err.message : 'unknown'}`);
+        logger.error(
+          `[WALLET] Failed to fetch balance for ${wallet.address.slice(0, 8)}...: ` +
+          `${err instanceof Error ? err.message : 'unknown'}`
+        );
       }
     }
   }

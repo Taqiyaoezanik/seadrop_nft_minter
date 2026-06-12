@@ -46,6 +46,7 @@ export async function mintCommand(ctx: Context): Promise<void> {
     quantity: config.mint.defaultQuantity,
   });
 
+  // Create job here — single source of truth for jobId
   const jobId = uuidv4();
   createJob({ id: jobId, telegram_id: telegramId });
 
@@ -65,7 +66,8 @@ export async function mintCommand(ctx: Context): Promise<void> {
     { parse_mode: 'HTML' }
   );
 
-  await addMintJob({ telegramId, url }, jobId);
+  // Pass jobId to engine — engine does NOT create its own job
+  await addMintJob({ telegramId, url, jobId });
 }
 
 export async function statusCommand(ctx: Context): Promise<void> {
@@ -135,7 +137,10 @@ export async function cancelCommand(ctx: Context): Promise<void> {
   const cancelled = cancelJob(jobId, telegramId);
 
   if (cancelled) {
-    await ctx.reply(`\u2705 Job <code>${jobId.slice(0, 8)}</code> has been cancelled.`, { parse_mode: 'HTML' });
+    await ctx.reply(
+      `\u2705 Job <code>${jobId.slice(0, 8)}</code> has been cancelled.`,
+      { parse_mode: 'HTML' }
+    );
   } else {
     await ctx.reply('\u274c Job not found, not yours, or already processing/completed.');
   }
