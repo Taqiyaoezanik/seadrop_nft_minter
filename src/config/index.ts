@@ -34,8 +34,6 @@ const envSchema = z.object({
   // GoPlus
   GOPLUS_STRICT_MODE: z.string().default('false'),
 
-  // Redis (optional)
-  REDIS_URL: z.string().optional(),
 });
 
 function loadWalletKeys(): string[] {
@@ -95,9 +93,6 @@ export const config = {
   goplus: {
     strictMode: env.GOPLUS_STRICT_MODE === 'true',
     baseUrl: 'https://api.gopluslabs.io',
-  },
-  redis: {
-    url: env.REDIS_URL,
   },
   walletKeys: loadWalletKeys(),
 } as const;

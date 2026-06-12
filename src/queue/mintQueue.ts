@@ -5,30 +5,6 @@ import { updateJobStatus, getJob } from '../db/mintJobs';
 import { runMintJob } from '../mint/engine';
 import type { MintJobInput, MintEngineResult } from '../mint/engine';
 
-let _bullQueueInitialized = false;
-
-async function tryInitBullMQ(): Promise<void> {
-  if (!config.redis.url || _bullQueueInitialized) return;
-  try {
-    const { Queue } = await import('bullmq');
-    const redisUrl = new URL(config.redis.url!);
-    new Queue('mint-jobs', {
-      connection: {
-        host: redisUrl.hostname,
-        port: parseInt(redisUrl.port || '6379', 10),
-        password: redisUrl.password || undefined,
-        maxRetriesPerRequest: null,
-      },
-    });
-    _bullQueueInitialized = true;
-    logger.info('[QUEUE] BullMQ initialized with Redis persistence');
-  } catch (err) {
-    logger.warn(
-      `[QUEUE] BullMQ init failed, using p-queue only: ${err instanceof Error ? err.message : 'unknown'}`
-    );
-  }
-}
-
 const pQueue = new PQueue({ concurrency: config.mint.queueConcurrency });
 
 let notifyCallback: ((telegramId: string, result: MintEngineResult) => Promise<void>) | null = null;
@@ -40,7 +16,6 @@ export function setNotifyCallback(
 }
 
 export async function initQueue(): Promise<void> {
-  await tryInitBullMQ();
   logger.info(`[QUEUE] p-queue initialized (concurrency: ${config.mint.queueConcurrency})`);
 }
 
