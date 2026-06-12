@@ -17,8 +17,8 @@ An open source, self-hosted Telegram bot that automatically mints NFTs from Open
 
 ```bash
 # 1. Clone the repository
-git clone https://gitlab.com/idcrypto-group/idcrypto-project.git
-cd idcrypto-project
+git clone https://gitlab.com/oezank/seadrop_nft_minter.git
+cd seadrop_nft_minter
 
 # 2. Install dependencies
 npm install
