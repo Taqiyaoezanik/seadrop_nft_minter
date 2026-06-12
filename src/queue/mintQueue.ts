@@ -11,9 +11,12 @@ async function tryInitBullMQ(): Promise<void> {
   if (!config.redis.url || _bullQueueInitialized) return;
   try {
     const { Queue } = await import('bullmq');
-    const { default: IORedis } = await import('ioredis');
-    const connection = new IORedis(config.redis.url, { maxRetriesPerRequest: null });
-    new Queue('mint-jobs', { connection });
+    new Queue('mint-jobs', {
+      connection: {
+        url: config.redis.url,
+        maxRetriesPerRequest: null,
+      },
+    });
     _bullQueueInitialized = true;
     logger.info('[QUEUE] BullMQ initialized with Redis persistence');
   } catch (err) {
