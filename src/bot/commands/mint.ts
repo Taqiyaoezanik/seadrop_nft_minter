@@ -9,6 +9,63 @@ import { v4 as uuidv4 } from 'uuid';
 import { createJob } from '../../db/mintJobs';
 import { parseOpenSeaUrl } from '../../mint/urlParser';
 
+export async function mintMaxCommand(ctx: Context): Promise<void> {
+  const telegramId = ctx.from?.id?.toString() ?? '';
+  const username = ctx.from?.username;
+  getOrCreateUser(telegramId, username);
+
+  const text = ctx.message && 'text' in ctx.message ? ctx.message.text : '';
+  const parts = text.trim().split(/\s+/);
+  const url = parts[1];
+
+  if (!url) {
+    await ctx.reply(
+      '\u274c <b>Usage:</b> /mint_max &lt;opensea_url&gt;\n\n' +
+      '<b>Example:</b>\n' +
+      '\u2022 /mint_max https://opensea.io/collection/azuki',
+      { parse_mode: 'HTML' }
+    );
+    return;
+  }
+
+  try {
+    parseOpenSeaUrl(url);
+  } catch (err) {
+    await ctx.reply(
+      `\u274c <b>Invalid URL:</b> ${err instanceof Error ? err.message : 'Unknown error'}`,
+      { parse_mode: 'HTML' }
+    );
+    return;
+  }
+
+  const userSettings = getUserSettings(telegramId, {
+    max_mint_price_eth: config.mint.defaultMaxMintPriceEth,
+    max_gas_eth: config.mint.defaultMaxGasEth,
+    quantity: config.mint.defaultQuantity,
+  });
+
+  const jobId = uuidv4();
+  createJob({ id: jobId, telegram_id: telegramId });
+
+  logAction(telegramId, 'MINT_MAX_QUEUED', { jobId, url });
+  logger.info(`[MINT_CMD] User ${telegramId} queued mint_max job ${jobId} for ${url}`);
+
+  await ctx.reply(
+    mintStarted({
+      collectionName: 'Resolving...',
+      contractAddress: 'Pending',
+      quantity: 0, // will be determined by contract max
+      mintPriceEth: 'Pending',
+      maxGasEth: userSettings.max_gas_eth,
+      walletAddress: '0x0000000000000000000000000000000000000000',
+      jobId,
+    }).replace('Quantity: <b>0</b>', 'Quantity: <b>MAX</b>'),
+    { parse_mode: 'HTML' }
+  );
+
+  await addMintJob({ telegramId, url, jobId, forceMaxQuantity: true }, jobId);
+}
+
 export async function mintCommand(ctx: Context): Promise<void> {
   const telegramId = ctx.from?.id?.toString() ?? '';
   const username = ctx.from?.username;

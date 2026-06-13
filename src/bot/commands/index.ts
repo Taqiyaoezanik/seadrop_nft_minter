@@ -1,6 +1,6 @@
 import type { Telegraf, Context } from 'telegraf';
 import { startCommand, helpCommand } from './start';
-import { mintCommand, statusCommand, historyCommand, cancelCommand } from './mint';
+import { mintCommand, mintMaxCommand, statusCommand, historyCommand, cancelCommand } from './mint';
 import { walletsCommand } from './wallet';
 import { settingsCommand, setMaxPriceCommand, setMaxGasCommand, setQuantityCommand } from './settings';
 import {
@@ -18,6 +18,7 @@ export function registerCommands(bot: Telegraf<Context>): void {
   bot.command('help', helpCommand);
 
   bot.command('mint', rateLimitMint(), mintCommand);
+  bot.command('mint_max', rateLimitMint(), mintMaxCommand);
   bot.command('status', statusCommand);
   bot.command('history', historyCommand);
   bot.command('cancel', cancelCommand);

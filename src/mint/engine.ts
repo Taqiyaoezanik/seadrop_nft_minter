@@ -19,6 +19,7 @@ export interface MintJobInput {
   telegramId: string;
   url: string;
   jobId: string; // jobId created by mintCommand before queuing
+  forceMaxQuantity?: boolean; // if true, mint up to maxTotalMintableByWallet
 }
 
 export interface MintEngineResult {
@@ -154,7 +155,9 @@ export async function runMintJob(
         );
       }
 
-      const quantity = Math.min(userSettings.quantity, remainingMints);
+      const quantity = input.forceMaxQuantity
+        ? remainingMints
+        : Math.min(userSettings.quantity, remainingMints);
 
       // Step 9: Validate mint price
       const mintPriceEth = formatEther(mintConfig.publicDrop.mintPrice);
