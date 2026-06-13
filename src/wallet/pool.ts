@@ -62,7 +62,6 @@ class WalletPool {
 
   public acquireWallet(): WalletEntry | null {
     this.ensureInitialized();
-    // TODO LOW: implement round-robin to distribute load across wallets
     for (const [, wallet] of this.wallets) {
       if (wallet.status === 'IDLE') {
         wallet.status = 'BUSY';
@@ -71,6 +70,31 @@ class WalletPool {
       }
     }
     logger.warn('[WALLET] No idle wallets available in pool');
+    return null;
+  }
+
+  /**
+   * Acquire the first IDLE wallet whose 1-based index falls within [from, to].
+   * Indices are 1-based and correspond to the order wallets were loaded from env
+   * (WALLET_1_KEY = index 1, WALLET_2_KEY = index 2, …).
+   */
+  public acquireWalletInRange(from: number, to: number): WalletEntry | null {
+    this.ensureInitialized();
+    const entries = Array.from(this.wallets.values());
+    const clampedFrom = Math.max(1, from);
+    const clampedTo = Math.min(entries.length, to);
+
+    for (let i = clampedFrom - 1; i < clampedTo; i++) {
+      const wallet = entries[i];
+      if (wallet && wallet.status === 'IDLE') {
+        wallet.status = 'BUSY';
+        logger.info(
+          `[WALLET] Acquired wallet #${i + 1} ${wallet.address.slice(0, 8)}... (range ${from}-${to})`
+        );
+        return wallet;
+      }
+    }
+    logger.warn(`[WALLET] No idle wallets available in range ${from}-${to}`);
     return null;
   }
 
