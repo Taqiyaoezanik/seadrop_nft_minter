@@ -51,13 +51,27 @@ export async function readMintConfig(
     logger.info(`[MINT_CONFIG] getFeeRecipients reverted, using OpenSea default fee recipient: ${OPENSEA_FEE_RECIPIENT}`);
   }
 
-  // Get mint stats from SeaDrop contract — MUST use 2-param version on SeaDrop, not NFT contract
+  // Get mint stats — try SeaDrop contract first, fallback to NFT contract directly
   let mintStats: MintStats = {
     minterNumMinted: 0n,
     currentTotalSupply: 0n,
     maxSupply: 0n,
   };
+
+  const NFT_MINT_STATS_ABI = [{
+    name: 'getMintStats',
+    type: 'function',
+    stateMutability: 'view',
+    inputs: [{ name: 'minter', type: 'address' }],
+    outputs: [
+      { name: 'minterNumMinted', type: 'uint256' },
+      { name: 'currentTotalSupply', type: 'uint256' },
+      { name: 'maxSupply', type: 'uint256' },
+    ],
+  }] as const;
+
   try {
+    // Try SeaDrop contract (2-param version)
     const result = await publicClient.readContract({
       address: seaDropAddress,
       abi: SeaDropV1Abi,
@@ -71,10 +85,28 @@ export async function readMintConfig(
       maxSupply: result[2] ?? 0n,
     };
     logger.info(
-      `[MINT_CONFIG] Mint stats — minted: ${mintStats.minterNumMinted}, supply: ${mintStats.currentTotalSupply}/${mintStats.maxSupply}`
+      `[MINT_CONFIG] Mint stats (SeaDrop) — minted: ${mintStats.minterNumMinted}, supply: ${mintStats.currentTotalSupply}/${mintStats.maxSupply}`
     );
-  } catch (err) {
-    logger.warn(`[MINT_CONFIG] Failed to get mint stats: ${err instanceof Error ? err.message : 'unknown'}`);
+  } catch {
+    // Fallback: read getMintStats directly from NFT contract (1-param version)
+    try {
+      const result = await publicClient.readContract({
+        address: nftContract,
+        abi: NFT_MINT_STATS_ABI,
+        functionName: 'getMintStats',
+        args: [walletAddress],
+      });
+      mintStats = {
+        minterNumMinted: result.minterNumMinted,
+        currentTotalSupply: result.currentTotalSupply,
+        maxSupply: result.maxSupply,
+      };
+      logger.info(
+        `[MINT_CONFIG] Mint stats (NFT contract) — minted: ${mintStats.minterNumMinted}, supply: ${mintStats.currentTotalSupply}/${mintStats.maxSupply}`
+      );
+    } catch (err) {
+      logger.warn(`[MINT_CONFIG] Failed to get mint stats from both sources: ${err instanceof Error ? err.message : 'unknown'}`);
+    }
   }
 
   return {
