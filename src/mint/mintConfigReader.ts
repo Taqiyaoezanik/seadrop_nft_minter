@@ -97,9 +97,9 @@ export async function readMintConfig(
         args: [walletAddress],
       });
       mintStats = {
-        minterNumMinted: result.minterNumMinted,
-        currentTotalSupply: result.currentTotalSupply,
-        maxSupply: result.maxSupply,
+        minterNumMinted: result[0],
+        currentTotalSupply: result[1],
+        maxSupply: result[2],
       };
       logger.info(
         `[MINT_CONFIG] Mint stats (NFT contract) — minted: ${mintStats.minterNumMinted}, supply: ${mintStats.currentTotalSupply}/${mintStats.maxSupply}`
