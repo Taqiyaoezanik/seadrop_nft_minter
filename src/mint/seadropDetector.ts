@@ -96,12 +96,6 @@ async function getPublicDropFromSeaDrop(
 export async function detectActiveSeaDrop(nftContract: Address): Promise<SeaDropTarget | null> {
   logger.info(`[SEADROP] Detecting SeaDrop for contract ${nftContract}`);
 
-  const isSeaDropToken = await checkSupportsInterface(nftContract, SEADROP_INTERFACE_ID);
-  if (!isSeaDropToken) {
-    logger.info(`[SEADROP] Contract ${nftContract} does not support INonFungibleSeaDropToken interface`);
-    return null;
-  }
-
   const allowedAddresses = await getAllowedSeaDrop(nftContract);
   if (allowedAddresses.length === 0) {
     logger.info(`[SEADROP] No allowed SeaDrop addresses found for ${nftContract}`);
