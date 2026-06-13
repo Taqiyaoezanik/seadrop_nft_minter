@@ -14,6 +14,8 @@ import { logAction } from '../db/auditLogs';
 import { getUserSettings } from '../db/users';
 import { config } from '../config';
 import { logger } from '../utils/logger';
+import { checkIfDrop } from './dropDetector';
+import { buildDropMintTransaction } from './dropMinter';
 
 export interface WalletRange {
   /** 1-based index of the first wallet to use (inclusive) */
@@ -99,6 +101,150 @@ export async function runMintJob(
     if (validationError) {
       return fail(validationError);
     }
+
+    // Step 4: Check if collection is an OpenSea Drop (supports public + WL mints via API)
+    const dropInfo = collection.collectionSlug ? await checkIfDrop(collection.collectionSlug) : null;
+
+    if (dropInfo && dropInfo.is_minting) {
+      // ===== OPENSEA DROPS API PATH (Auto-handles public + WL mints) =====
+      logger.info(`[ENGINE] Using OpenSea Drops API for ${collection.collectionSlug}`);
+
+      // Acquire wallet
+      const wallet = input.walletRange
+        ? walletPool.acquireWalletInRange(input.walletRange.from, input.walletRange.to)
+        : walletPool.acquireWallet();
+      if (!wallet) {
+        const rangeMsg = input.walletRange
+          ? ` in wallet range ${input.walletRange.from}-${input.walletRange.to}`
+          : '';
+        return fail(`No available wallets${rangeMsg}. All wallets are busy.`);
+      }
+
+      updateJobStatus(jobId, 'PROCESSING', {
+        wallet_address: wallet.address,
+      });
+
+      if (onStatusUpdate) {
+        await onStatusUpdate(jobId, 'processing');
+      }
+
+      try {
+        // Determine quantity
+        const quantity = input.forceMaxQuantity
+          ? parseInt(dropInfo.active_stage?.max_per_wallet ?? '1')
+          : Math.min(userSettings.quantity, parseInt(dropInfo.active_stage?.max_per_wallet ?? '1'));
+
+        // Get mint transaction data from OpenSea API (handles signature for WL automatically)
+        const mintTxResult = await buildDropMintTransaction(collection.collectionSlug, wallet.address, quantity);
+
+        if (!mintTxResult.success) {
+          // If server error, fallback to manual detection instead of failing
+          if (mintTxResult.error.code === 'SERVER_ERROR') {
+            logger.warn(`[ENGINE] OpenSea Drops API unavailable, falling back to manual detection`);
+            walletPool.releaseWallet(wallet.address);
+            // Continue to fallback path below
+          } else {
+            walletPool.releaseWallet(wallet.address);
+            return fail(mintTxResult.error.message);
+          }
+        } else {
+          const { to, data, value } = mintTxResult.data;
+
+          // Validate mint price
+          const mintPriceWei = BigInt(value);
+          const mintPriceEth = formatEther(mintPriceWei);
+          const parsedMaxPrice = parseFloat(userSettings.max_mint_price_eth);
+          const userMaxPriceWei = BigInt(Math.floor((isNaN(parsedMaxPrice) ? 0 : parsedMaxPrice) * 1e18));
+
+          if (mintPriceWei > userMaxPriceWei) {
+            walletPool.releaseWallet(wallet.address);
+            return fail(
+              `Mint price (${mintPriceEth} ETH) exceeds your max price limit ` +
+              `(${userSettings.max_mint_price_eth} ETH). Use /set_maxprice to increase.`
+            );
+          }
+
+          updateJobStatus(jobId, 'PROCESSING', { mint_price_eth: mintPriceEth });
+
+          // Estimate gas for Drop transaction
+          const dropCalldata = { to, data, value: mintPriceWei };
+          let gasEstimate;
+          try {
+            gasEstimate = await estimateGas(dropCalldata, wallet.address, userSettings.max_gas_eth, userSettings.priority_fee_gwei);
+          } catch (err) {
+            walletPool.releaseWallet(wallet.address);
+            return fail(err instanceof Error ? err.message : 'Gas estimation failed');
+          }
+
+          // Send transaction
+          const privateKey = walletPool.getPrivateKey(wallet.address);
+          if (!privateKey) {
+            walletPool.releaseWallet(wallet.address);
+            return fail('Could not retrieve wallet private key');
+          }
+
+          let txHash: `0x${string}`;
+          try {
+            const result = await sendMintTransaction(dropCalldata, privateKey, gasEstimate);
+            txHash = result.txHash;
+          } catch (err) {
+            walletPool.releaseWallet(wallet.address);
+            return fail(err instanceof Error ? err.message : 'Failed to send transaction');
+          }
+
+          updateJobStatus(jobId, 'PROCESSING', { tx_hash: txHash });
+
+          if (onStatusUpdate) {
+            await onStatusUpdate(jobId, 'monitoring');
+          }
+
+          // Monitor transaction
+          const monitorResult = await monitorTransaction(txHash, contractAddress);
+          walletPool.releaseWallet(wallet.address);
+
+          if (monitorResult.status === 'CONFIRMED') {
+            updateJobStatus(jobId, 'CONFIRMED', {
+              tx_hash: txHash,
+              token_ids: monitorResult.tokenIds,
+              gas_used_eth: monitorResult.gasUsedEth,
+            });
+            logAction(telegramId, 'MINT_CONFIRMED', { jobId, txHash });
+            return {
+              jobId,
+              status: 'CONFIRMED',
+              txHash,
+              tokenIds: monitorResult.tokenIds,
+              gasUsedEth: monitorResult.gasUsedEth,
+              collectionName: collection.collectionName,
+            };
+          } else {
+            updateJobStatus(jobId, monitorResult.status, {
+              tx_hash: txHash,
+              error_message:
+                monitorResult.status === 'DROPPED'
+                  ? 'Transaction timed out — check Etherscan for status'
+                  : 'Transaction reverted on-chain',
+            });
+            return {
+              jobId,
+              status: monitorResult.status,
+              txHash,
+              errorMessage:
+                monitorResult.status === 'DROPPED'
+                  ? 'Transaction timed out — check Etherscan for status'
+                  : 'Transaction reverted on-chain',
+              collectionName: collection.collectionName,
+            };
+          }
+        }
+      } catch (err) {
+        walletPool.releaseWallet(wallet.address);
+        throw err;
+      }
+    }
+
+    // ===== FALLBACK: MANUAL ON-CHAIN DETECTION PATH (current method) =====
+    logger.info(`[ENGINE] Using manual SeaDrop detection for ${contractAddress}`);
 
     // Step 4: Detect active SeaDrop (supportsInterface + getAllowedSeaDrop + probe active drop)
     const seaDropTarget = await detectActiveSeaDrop(contractAddress);

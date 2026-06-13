@@ -1,5 +1,5 @@
 import { formatEther } from 'viem';
-import { publicClient, getLatestBaseFee } from '../rpc/client';
+import { publicClient, getLatestBaseFee, getMaxPriorityFeePerGas } from '../rpc/client';
 import { config } from '../config';
 import { logger } from '../utils/logger';
 import type { Address } from 'viem';
@@ -34,14 +34,32 @@ export async function estimateGas(
 
   logger.info(`[GAS] Raw gas estimate: ${rawEstimate}`);
 
-  // Apply 20% buffer
-  const gasLimit = (rawEstimate * 120n) / 100n;
+  // Apply 10% buffer (reduced from 20% to minimize gas cost)
+  const gasLimit = (rawEstimate * 110n) / 100n;
 
-  const effectivePriorityFeeGwei = priorityFeeGwei ?? config.mint.maxPriorityFeeGwei;
-  const maxPriorityFeePerGas = BigInt(Math.ceil(effectivePriorityFeeGwei * 1_000_000_000));
-  // 10% buffer on baseFee is standard EIP-1559 practice.
-  // baseFee * 2 was overly conservative and inflated cost estimates ~10x on low-congestion blocks.
-  const maxFeePerGas = (baseFee * 110n) / 100n + maxPriorityFeePerGas;
+  // Use network priority fee if no user override, fallback to config
+  let maxPriorityFeePerGas: bigint;
+  if (priorityFeeGwei !== undefined) {
+    maxPriorityFeePerGas = BigInt(Math.ceil(priorityFeeGwei * 1_000_000_000));
+    logger.info(`[GAS] Using user priority fee: ${priorityFeeGwei} gwei`);
+  } else {
+    try {
+      maxPriorityFeePerGas = await getMaxPriorityFeePerGas();
+      // Cap at config max to prevent extremely high fees
+      const configMaxWei = BigInt(Math.ceil(config.mint.maxPriorityFeeGwei * 1_000_000_000));
+      if (maxPriorityFeePerGas > configMaxWei) {
+        logger.warn(`[GAS] Network priority fee too high, capping at ${config.mint.maxPriorityFeeGwei} gwei`);
+        maxPriorityFeePerGas = configMaxWei;
+      }
+    } catch (error) {
+      logger.warn(`[GAS] Using fallback priority fee: ${config.mint.maxPriorityFeeGwei} gwei`);
+      maxPriorityFeePerGas = BigInt(Math.ceil(config.mint.maxPriorityFeeGwei * 1_000_000_000));
+    }
+  }
+
+  // No buffer on baseFee for minimal gas cost (aggressive pricing)
+  // baseFee alone is sufficient; buffer was inflating costs unnecessarily
+  const maxFeePerGas = baseFee + maxPriorityFeePerGas;
 
   const totalGasCostWei = gasLimit * maxFeePerGas;
   const totalGasCostEth = formatEther(totalGasCostWei);

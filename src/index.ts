@@ -3,6 +3,7 @@ import { createBot } from './bot/index';
 import { walletPool } from './wallet/pool';
 import { startBalanceChecker } from './wallet/balanceChecker';
 import { initWorker } from './queue/mintWorker';
+import { startScheduler, stopScheduler } from './scheduler/index';
 import { logger } from './utils/logger';
 
 async function main(): Promise<void> {
@@ -26,14 +27,19 @@ async function main(): Promise<void> {
   // Start balance checker
   startBalanceChecker(bot);
 
+  // Start scheduler for scheduled mints
+  startScheduler();
+
   // Graceful shutdown
   process.once('SIGINT', () => {
     logger.info('[MAIN] SIGINT received, shutting down...');
+    stopScheduler();
     bot.stop('SIGINT');
     process.exit(0);
   });
   process.once('SIGTERM', () => {
     logger.info('[MAIN] SIGTERM received, shutting down...');
+    stopScheduler();
     bot.stop('SIGTERM');
     process.exit(0);
   });

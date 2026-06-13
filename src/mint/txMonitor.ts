@@ -22,7 +22,7 @@ export async function monitorTransaction(
   timeoutSeconds?: number
 ): Promise<TxMonitorResult> {
   const timeout = (timeoutSeconds ?? config.mint.txTimeoutSeconds) * 1000;
-  const pollInterval = 5000;
+  const pollInterval = 2000; // Reduced from 5s to 2s for faster feedback
   const startTime = Date.now();
 
   logger.info(`[TX_MONITOR] Monitoring tx ${txHash}`);

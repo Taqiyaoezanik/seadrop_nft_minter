@@ -39,6 +39,10 @@ export async function helpCommand(ctx: Context): Promise<void> {
     `/status \u2014 Show active mint jobs\n` +
     `/history \u2014 Last 20 mint transactions\n` +
     `/cancel &lt;job_id&gt; \u2014 Cancel a pending job\n\n` +
+    `<b>\u23f0 Scheduled Mints</b>\n` +
+    `/schedule_mint &lt;url&gt; &lt;time&gt; \u2014 Schedule a mint (e.g. 22:00)\n` +
+    `/list_schedules \u2014 View all scheduled mints\n` +
+    `/cancel_schedule &lt;id&gt; \u2014 Cancel a scheduled mint\n\n` +
     `<b>Wallets</b>\n` +
     `/wallets \u2014 Show wallet pool status\n\n` +
     `<b>Settings</b>\n` +

@@ -18,7 +18,7 @@ interface GoPlusResponse {
 export async function checkGoPlus(contractAddress: Address): Promise<string | null> {
   try {
     const url = `${config.goplus.baseUrl}/api/v1/nft_security/1?contract_addresses=${contractAddress}`;
-    const response = await axios.get<GoPlusResponse>(url, { timeout: 10000 });
+    const response = await axios.get<GoPlusResponse>(url, { timeout: 3000 });
 
     if (response.data.code !== 1) {
       logger.warn(`[GOPLUS] API returned non-success code: ${response.data.code}`);

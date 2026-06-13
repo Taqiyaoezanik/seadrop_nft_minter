@@ -4,6 +4,7 @@ import { mintCommand, mintMaxCommand, statusCommand, historyCommand, cancelComma
 import { dryRunCommand, executeDryRun } from './dryrun';
 import { walletsCommand } from './wallet';
 import { settingsCommand, setMaxPriceCommand, setMaxGasCommand, setQuantityCommand, setPriorityFeeCommand } from './settings';
+import { scheduleMintCommand, listSchedulesCommand, cancelScheduleCommand } from './schedule';
 import {
   adminStatsCommand,
   adminReloadCommand,
@@ -51,6 +52,10 @@ export function registerCommands(bot: Telegraf<Context>): void {
   bot.command('cancel', cancelCommand);
 
   bot.command('wallets', walletsCommand);
+
+  bot.command('schedule_mint', scheduleMintCommand);
+  bot.command('list_schedules', listSchedulesCommand);
+  bot.command('cancel_schedule', cancelScheduleCommand);
 
   bot.command('settings', settingsCommand);
   bot.command('set_maxprice', setMaxPriceCommand);

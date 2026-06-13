@@ -1,6 +1,19 @@
 # SeaDrop Mint Bot
 
-An open source, self-hosted Telegram bot that automatically mints NFTs from OpenSea SeaDrop collections on Ethereum mainnet. Supports up to 100 concurrent burner wallets, per-user settings, and full risk validation before every mint.
+An open source, self-hosted Telegram bot that automatically mints NFTs from OpenSea SeaDrop collections on Ethereum mainnet. Supports up to 100 concurrent burner wallets, per-user settings, scheduled mints, and full risk validation before every mint.
+
+## ✨ Features
+
+- 🤖 **Automated Minting** - Queue multiple mints, bot handles everything
+- 🎫 **Whitelist/Allowlist Support** - Automatic WL mint via OpenSea Drops API (signature-based)
+- ⏰ **Scheduled Mints** - Schedule mints for specific times (perfect for WL/allowlist drops at 10 PM)
+- ⚡ **Optimized Gas** - Dynamic priority fee from network, minimal buffers (~0.00002-0.00003 ETH per mint)
+- 🚀 **Fast Execution** - 2-second polling, optimized API timeouts (~12-15 seconds total)
+- 💰 **Multi-Wallet Support** - Up to 100 concurrent wallets with automatic rotation
+- 🛡️ **Risk Validation** - Blacklist, Etherscan, GoPlus security checks before every mint
+- 🧪 **Dry-Run Mode** - Test mints with `eth_call` simulation (no transaction sent)
+- 📊 **Per-User Settings** - Each user can configure their own limits and preferences
+- 🔄 **Queue Management** - View status, history, cancel pending jobs
 
 ---
 
@@ -49,11 +62,11 @@ npm start
 | `OPENSEA_API_KEY` | ✅ | From [OpenSea Developer Portal](https://docs.opensea.io) |
 | `ETHERSCAN_API_KEY` | ✅ | From [etherscan.io/apis](https://etherscan.io/apis) |
 | `DEFAULT_MAX_MINT_PRICE_ETH` | — | Default max mint price in ETH (default: 0.1) |
-| `DEFAULT_MAX_GAS_ETH` | — | Default max gas fee in ETH (default: 0.02) |
+| `DEFAULT_MAX_GAS_ETH` | — | Default max gas fee in ETH (**optimized: 0.005**) |
 | `DEFAULT_QUANTITY` | — | Default mint quantity per job (default: 1) |
-| `LOW_BALANCE_THRESHOLD_ETH` | — | Warn when wallet balance below this (default: 0.05) |
-| `MAX_PRIORITY_FEE_GWEI` | — | EIP-1559 priority fee in gwei, supports decimals (default: 0.1) |
-| `TX_TIMEOUT_SECONDS` | — | Transaction timeout in seconds (default: 300) |
+| `LOW_BALANCE_THRESHOLD_ETH` | — | Warn when wallet balance below this (default: 0.0001) |
+| `MAX_PRIORITY_FEE_GWEI` | — | EIP-1559 priority fee in gwei (**optimized: 0.01**, supports decimals) |
+| `TX_TIMEOUT_SECONDS` | — | Transaction timeout in seconds (**optimized: 120**) |
 | `QUEUE_CONCURRENCY` | — | Max concurrent mint jobs (default: 10) |
 | `GOPLUS_STRICT_MODE` | — | Block mints if GoPlus API fails (default: false) |
 | `DRY_RUN_MODE` | — | Force all `/mint` commands to simulate only — no transactions sent (default: false) |
@@ -109,6 +122,63 @@ docker compose --profile redis up -d
 
 ---
 
+## Whitelist/Allowlist Mint Support
+
+Bot **automatically detects and handles WL mints** via OpenSea Drops API:
+
+- ✅ **Public Sale** - Anyone can mint (already supported)
+- ✅ **Signed Presale (WL)** - Wallet must be in whitelist (NEW!)
+- ✅ **Auto-detection** - Bot automatically selects eligible stage
+- ✅ **No manual signature extraction** - OpenSea API handles everything
+
+**How it works:**
+1. User `/mint` or `/schedule_mint` a Drop collection
+2. Bot calls OpenSea API to check eligibility
+3. If wallet in WL → API returns transaction with signature
+4. Bot executes mint automatically
+
+**Error handling:**
+- `Not eligible` - Wallet not in whitelist
+- `Drop inactive` - WL stage not started/ended
+- `API unavailable` - Falls back to manual on-chain detection
+
+---
+
+## Scheduled Mints (Perfect for Timed WL Drops!)
+
+Schedule mints to execute automatically at a specific time - perfect for allowlist drops when you want to sleep!
+
+**Example Usage:**
+```bash
+# Schedule a mint for 10 PM tonight
+/schedule_mint https://opensea.io/collection/azuki 22:00
+
+# Schedule with wallet range (wallets 1-5)
+/schedule_mint https://opensea.io/collection/azuki 22:00 1 5
+
+# Use 12-hour format
+/schedule_mint https://opensea.io/collection/azuki 10:00 PM
+
+# Full datetime
+/schedule_mint https://opensea.io/collection/azuki "2024-06-13 22:00"
+
+# View all schedules
+/list_schedules
+
+# Cancel a schedule
+/cancel_schedule <schedule_id>
+```
+
+**How it works:**
+- Bot checks every 30 seconds for due schedules
+- Automatically queues the mint job at scheduled time
+- Status updates: PENDING → EXECUTED/FAILED
+- Perfect for timed WL/allowlist mints
+
+**See [SCHEDULE_FEATURE.md](SCHEDULE_FEATURE.md) for complete documentation.**
+
+---
+
 ## Command Reference
 
 | Command | Description |
@@ -116,15 +186,23 @@ docker compose --profile redis up -d
 | `/start` | Welcome message and wallet pool status |
 | `/help` | Show all available commands |
 | `/mint <url>` | Start a mint job for an OpenSea collection URL |
+| `/mint_max <url> [from] [to]` | Mint maximum quantity, optionally specify wallet range |
 | `/status` | Show your active mint jobs |
 | `/history` | Show your last 20 mint transactions |
 | `/cancel <job_id>` | Cancel a pending mint job |
+| **Scheduled Mints** | |
+| `/schedule_mint <url> <time> [from] [to]` | Schedule a mint for later (e.g. `22:00` or `10:00 PM`) |
+| `/list_schedules` | Show all your scheduled mints |
+| `/cancel_schedule <id>` | Cancel a scheduled mint |
+| **Wallet Management** | |
 | `/wallets` | Show wallet pool: address, balance, status |
+| **Settings** | |
 | `/settings` | Show your current settings |
 | `/set_maxprice <eth>` | Set max mint price (e.g. `/set_maxprice 0.05`) |
-| `/set_maxgas <eth>` | Set max gas fee (e.g. `/set_maxgas 0.01`) |
+| `/set_maxgas <eth>` | Set max gas fee (e.g. `/set_maxgas 0.005`) |
 | `/set_quantity <n>` | Set mint quantity per job (e.g. `/set_quantity 2`) |
-| `/set_priorityfee <gwei>` | Set EIP-1559 priority fee in gwei (e.g. `/set_priorityfee 0.1`) |
+| `/set_priorityfee <gwei>` | Set EIP-1559 priority fee (e.g. `/set_priorityfee 0.01`) |
+| **Admin Commands** | |
 | `/blacklist <contract>` | Add contract to local blacklist (admin only) |
 | `/whitelist <contract>` | Remove contract from blacklist (admin only) |
 | `/admin_stats` | Total mints, success rate, wallet balances (admin only) |
@@ -208,6 +286,41 @@ mintPublic(nftContract, feeRecipient, address(0), quantity)
 4. **Private keys are never logged, displayed, or transmitted** by this bot. Verify this yourself before deploying.
 5. **Run on a trusted server.** Anyone with server access can read your `.env` file.
 6. **No warranty.** This is open source software. Use at your own risk.
+
+---
+
+## Gas Optimization
+
+This bot is **heavily optimized for minimal gas costs**:
+
+### Default Settings (Optimized)
+- `MAX_PRIORITY_FEE_GWEI=0.01` - Very low priority fee
+- `DEFAULT_MAX_GAS_ETH=0.005` - Reasonable gas limit
+- Gas limit buffer: 10% (reduced from 20%)
+- Base fee buffer: 0% (no buffer, use raw baseFee)
+- Dynamic priority fee from network with safety cap
+
+### Typical Gas Costs
+- **Free mints**: ~0.00002-0.00003 ETH (~$0.05-0.08 at $2500 ETH)
+- **Paid mints**: mint price + gas fee above
+
+### How Gas is Calculated
+```
+maxFeePerGas = baseFee + maxPriorityFeePerGas
+gasLimit = estimateGas * 1.10 (10% buffer)
+totalGasCost = gasLimit * maxFeePerGas
+```
+
+### Dynamic Priority Fee
+Bot automatically fetches network priority fee from last 4 blocks (median of 50th percentile), capped at `MAX_PRIORITY_FEE_GWEI` config for safety.
+
+### Comparison with Manual Wallet Mint
+Bot achieves **similar gas costs** to manual MetaMask/wallet minting when properly configured (~0.00002 ETH).
+
+### Tuning for Your Needs
+- **Cheaper gas, slower confirm**: Lower `MAX_PRIORITY_FEE_GWEI` to 0.001
+- **Faster confirm, higher gas**: Increase to 0.1-1.0
+- **Emergency fast mint**: Use `/set_priorityfee 2` for individual mint
 
 ---
 

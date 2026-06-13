@@ -87,6 +87,7 @@ export async function mintMaxCommand(ctx: Context): Promise<void> {
     max_mint_price_eth: config.mint.defaultMaxMintPriceEth,
     max_gas_eth: config.mint.defaultMaxGasEth,
     quantity: config.mint.defaultQuantity,
+    priority_fee_gwei: config.mint.maxPriorityFeeGwei,
   });
 
   const jobId = uuidv4();
@@ -162,6 +163,7 @@ export async function mintCommand(ctx: Context): Promise<void> {
     max_mint_price_eth: config.mint.defaultMaxMintPriceEth,
     max_gas_eth: config.mint.defaultMaxGasEth,
     quantity: config.mint.defaultQuantity,
+    priority_fee_gwei: config.mint.maxPriorityFeeGwei,
   });
 
   // Single source of truth for jobId — created here, passed to engine

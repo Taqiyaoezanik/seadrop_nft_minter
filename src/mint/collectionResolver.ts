@@ -28,7 +28,7 @@ async function fetchWithRetry<T>(url: string, headers: Record<string, string>, r
 
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
-      const response = await axios.get<T>(url, { headers, timeout: 10000 });
+      const response = await axios.get<T>(url, { headers, timeout: 5000 });
       return response.data;
     } catch (err) {
       if (err instanceof AxiosError) {
