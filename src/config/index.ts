@@ -23,7 +23,7 @@ const envSchema = z.object({
   DEFAULT_MAX_GAS_ETH: z.string().default('0.02'),
   DEFAULT_QUANTITY: z.string().default('1'),
   LOW_BALANCE_THRESHOLD_ETH: z.string().default('0.05'),
-  MAX_PRIORITY_FEE_GWEI: z.string().default('2'),
+  MAX_PRIORITY_FEE_GWEI: z.string().default('0.1'),
   TX_TIMEOUT_SECONDS: z.string().default('300'),
   QUEUE_CONCURRENCY: z.string().default('10'),
 
@@ -85,7 +85,7 @@ export const config = {
     defaultMaxGasEth: env.DEFAULT_MAX_GAS_ETH,
     defaultQuantity: parseInt(env.DEFAULT_QUANTITY, 10),
     lowBalanceThresholdEth: env.LOW_BALANCE_THRESHOLD_ETH,
-    maxPriorityFeeGwei: parseInt(env.MAX_PRIORITY_FEE_GWEI, 10),
+    maxPriorityFeeGwei: parseFloat(env.MAX_PRIORITY_FEE_GWEI),
     txTimeoutSeconds: parseInt(env.TX_TIMEOUT_SECONDS, 10),
     queueConcurrency: parseInt(env.QUEUE_CONCURRENCY, 10),
     dryRunMode: env.DRY_RUN_MODE === 'true',

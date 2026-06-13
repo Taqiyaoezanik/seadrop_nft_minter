@@ -52,7 +52,7 @@ npm start
 | `DEFAULT_MAX_GAS_ETH` | — | Default max gas fee in ETH (default: 0.02) |
 | `DEFAULT_QUANTITY` | — | Default mint quantity per job (default: 1) |
 | `LOW_BALANCE_THRESHOLD_ETH` | — | Warn when wallet balance below this (default: 0.05) |
-| `MAX_PRIORITY_FEE_GWEI` | — | EIP-1559 priority fee in gwei (default: 2) |
+| `MAX_PRIORITY_FEE_GWEI` | — | EIP-1559 priority fee in gwei, supports decimals (default: 0.1) |
 | `TX_TIMEOUT_SECONDS` | — | Transaction timeout in seconds (default: 300) |
 | `QUEUE_CONCURRENCY` | — | Max concurrent mint jobs (default: 10) |
 | `GOPLUS_STRICT_MODE` | — | Block mints if GoPlus API fails (default: false) |
