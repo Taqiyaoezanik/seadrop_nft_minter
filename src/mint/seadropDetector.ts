@@ -65,6 +65,19 @@ async function getPublicDropFromSeaDrop(
   nftContract: Address
 ): Promise<PublicDrop | null> {
   try {
+    // Validate the contract is actually registered on this SeaDrop instance
+    // by calling getMintStats — it reverts for unregistered contracts
+    await publicClient.readContract({
+      address: seaDropAddress,
+      abi: SeaDropV1Abi,
+      functionName: 'getMintStats',
+      args: [nftContract, nftContract], // dummy minter address, just checking revert
+    });
+  } catch {
+    return null; // not registered on this SeaDrop
+  }
+
+  try {
     const result = await publicClient.readContract({
       address: seaDropAddress,
       abi: SeaDropV1Abi,
@@ -79,7 +92,6 @@ async function getPublicDropFromSeaDrop(
       feeBps: number;
       restrictFeeRecipients: boolean;
     };
-    // startTime > 0 confirms this contract has an active drop configured
     if (drop.startTime === 0n) return null;
     return {
       mintPrice: drop.mintPrice,
@@ -100,10 +112,10 @@ export async function detectActiveSeaDrop(nftContract: Address): Promise<SeaDrop
   // Try getAllowedSeaDrop first
   let allowedAddresses = await getAllowedSeaDrop(nftContract);
 
-  // Fallback: probe all known SeaDrop addresses directly
+  // Fallback: probe all known SeaDrop addresses directly (V1.1 first — newer standard)
   if (allowedAddresses.length === 0) {
     logger.info(`[SEADROP] getAllowedSeaDrop returned empty, probing known SeaDrop addresses directly`);
-    allowedAddresses = [SEADROP_V1_ADDRESS, SEADROP_V1_1_ADDRESS];
+    allowedAddresses = [SEADROP_V1_1_ADDRESS, SEADROP_V1_ADDRESS];
   }
 
   for (const seaDropAddr of allowedAddresses) {
