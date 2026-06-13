@@ -65,19 +65,6 @@ async function getPublicDropFromSeaDrop(
   nftContract: Address
 ): Promise<PublicDrop | null> {
   try {
-    // First verify the contract is actually registered on this SeaDrop
-    // getFeeRecipients reverts for unregistered contracts
-    await publicClient.readContract({
-      address: seaDropAddress,
-      abi: SeaDropV1Abi,
-      functionName: 'getFeeRecipients',
-      args: [nftContract],
-    });
-  } catch {
-    return null; // not registered on this SeaDrop
-  }
-
-  try {
     const result = await publicClient.readContract({
       address: seaDropAddress,
       abi: SeaDropV1Abi,
@@ -92,6 +79,8 @@ async function getPublicDropFromSeaDrop(
       feeBps: number;
       restrictFeeRecipients: boolean;
     };
+    // startTime > 0 confirms this contract has an active drop configured
+    if (drop.startTime === 0n) return null;
     return {
       mintPrice: drop.mintPrice,
       startTime: drop.startTime,
