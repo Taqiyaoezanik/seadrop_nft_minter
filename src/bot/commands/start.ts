@@ -35,6 +35,7 @@ export async function helpCommand(ctx: Context): Promise<void> {
     `<b>Minting</b>\n` +
     `/mint &lt;url&gt; \u2014 Mint from OpenSea collection URL\n` +
     `/mint_max &lt;url&gt; \u2014 Mint maximum allowed quantity\n` +
+    `/dryrun &lt;url&gt; \u2014 Simulate a mint (no transaction sent)\n` +
     `/status \u2014 Show active mint jobs\n` +
     `/history \u2014 Last 20 mint transactions\n` +
     `/cancel &lt;job_id&gt; \u2014 Cancel a pending job\n\n` +
