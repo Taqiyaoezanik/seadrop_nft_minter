@@ -36,7 +36,6 @@ export async function estimateGas(
   // Apply 20% buffer
   const gasLimit = (rawEstimate * 120n) / 100n;
 
-  const baseFee = await getLatestBaseFee();
   const maxPriorityFeePerGas = BigInt(config.mint.maxPriorityFeeGwei) * 1_000_000_000n;
   // 10% buffer on baseFee is standard EIP-1559 practice.
   // baseFee * 2 was overly conservative and inflated cost estimates ~10x on low-congestion blocks.
