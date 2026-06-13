@@ -96,10 +96,13 @@ async function getPublicDropFromSeaDrop(
 export async function detectActiveSeaDrop(nftContract: Address): Promise<SeaDropTarget | null> {
   logger.info(`[SEADROP] Detecting SeaDrop for contract ${nftContract}`);
 
-  const allowedAddresses = await getAllowedSeaDrop(nftContract);
+  // Try getAllowedSeaDrop first
+  let allowedAddresses = await getAllowedSeaDrop(nftContract);
+
+  // Fallback: probe all known SeaDrop addresses directly
   if (allowedAddresses.length === 0) {
-    logger.info(`[SEADROP] No allowed SeaDrop addresses found for ${nftContract}`);
-    return null;
+    logger.info(`[SEADROP] getAllowedSeaDrop returned empty, probing known SeaDrop addresses directly`);
+    allowedAddresses = [SEADROP_V1_ADDRESS, SEADROP_V1_1_ADDRESS];
   }
 
   for (const seaDropAddr of allowedAddresses) {
