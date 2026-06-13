@@ -195,41 +195,53 @@ export async function runDryRun(telegramId: string, url: string): Promise<DryRun
 
     // Step 11: Build calldata + gas estimate
     const calldata = buildMintCalldata(mintConfig, quantity, walletAddress);
+    let gasCheckPassed = false;
     try {
       const gasEstimate = await estimateGas(calldata, walletAddress, userSettings.max_gas_eth);
       result.gasEstimateEth = gasEstimate.totalGasCostEth;
+      gasCheckPassed = true;
       checks.push({
         name: 'Gas estimate within limit',
         passed: true,
         detail: `${gasEstimate.totalGasCostEth} ETH (limit ${userSettings.max_gas_eth} ETH)`,
       });
     } catch (err) {
+      const reason = extractRevertReason(err);
+      logger.warn(`[DRY_RUN] Gas estimate failed: ${reason}`);
       checks.push({
         name: 'Gas estimate within limit',
         passed: false,
-        detail: extractRevertReason(err),
+        detail: reason,
       });
     }
 
     // Step 12: On-chain simulation via eth_call — NO transaction is broadcast
-    result.simulationRan = true;
-    try {
-      await publicClient.call({
-        account: walletAddress,
-        to: calldata.to,
-        data: calldata.data,
-        value: calldata.value,
-      });
-      result.simulationSuccess = true;
-      checks.push({ name: 'On-chain simulation (eth_call)', passed: true });
-    } catch (err) {
-      result.simulationSuccess = false;
-      result.revertReason = extractRevertReason(err);
-      checks.push({
-        name: 'On-chain simulation (eth_call)',
-        passed: false,
-        detail: result.revertReason,
-      });
+    // Skip if any prior check already failed (avoids misleading revert reasons)
+    const priorChecksPassed = checks.every((c) => c.passed);
+    if (!priorChecksPassed) {
+      logger.info(`[DRY_RUN] Skipping eth_call — prior checks failed`);
+      result.simulationRan = false;
+    } else {
+      result.simulationRan = true;
+      try {
+        await publicClient.call({
+          account: walletAddress,
+          to: calldata.to,
+          data: calldata.data,
+          value: calldata.value,
+        });
+        result.simulationSuccess = true;
+        checks.push({ name: 'On-chain simulation (eth_call)', passed: true });
+      } catch (err) {
+        result.simulationSuccess = false;
+        result.revertReason = extractRevertReason(err);
+        logger.warn(`[DRY_RUN] eth_call reverted: ${result.revertReason}`);
+        checks.push({
+          name: 'On-chain simulation (eth_call)',
+          passed: false,
+          detail: result.revertReason,
+        });
+      }
     }
   } catch (err) {
     checks.push({
