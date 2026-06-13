@@ -175,7 +175,7 @@ export async function runMintJob(
 
       // Step 10: Build calldata
       // tx.to = SeaDrop contract, nftContract = first arg in mintPublic()
-      const calldata = buildMintCalldata(mintConfig, quantity);
+      const calldata = buildMintCalldata(mintConfig, quantity, wallet.address);
 
       // Step 11: Estimate gas
       let gasEstimate;
