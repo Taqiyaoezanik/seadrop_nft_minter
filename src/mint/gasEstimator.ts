@@ -20,12 +20,18 @@ export async function estimateGas(
 ): Promise<GasEstimate> {
   logger.info(`[GAS] Estimating gas for mint tx from ${fromAddress.slice(0, 8)}...`);
 
+  // Fetch baseFee first so we can log it even if estimateGas throws
+  const baseFee = await getLatestBaseFee();
+  logger.info(`[GAS] Current baseFee: ${baseFee} wei (${Number(baseFee) / 1e9} gwei)`);
+
   const rawEstimate = await publicClient.estimateGas({
     account: fromAddress,
     to: calldata.to,
     data: calldata.data,
     value: calldata.value,
   });
+
+  logger.info(`[GAS] Raw gas estimate: ${rawEstimate}`);
 
   // Apply 20% buffer
   const gasLimit = (rawEstimate * 120n) / 100n;
