@@ -88,6 +88,7 @@ export const config = {
     maxPriorityFeeGwei: parseInt(env.MAX_PRIORITY_FEE_GWEI, 10),
     txTimeoutSeconds: parseInt(env.TX_TIMEOUT_SECONDS, 10),
     queueConcurrency: parseInt(env.QUEUE_CONCURRENCY, 10),
+    dryRunMode: env.DRY_RUN_MODE === 'true',
   },
   rateLimit: {
     max: parseInt(env.RATE_LIMIT_MAX, 10),

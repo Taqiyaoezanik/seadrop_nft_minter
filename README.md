@@ -56,6 +56,7 @@ npm start
 | `TX_TIMEOUT_SECONDS` | — | Transaction timeout in seconds (default: 300) |
 | `QUEUE_CONCURRENCY` | — | Max concurrent mint jobs (default: 10) |
 | `GOPLUS_STRICT_MODE` | — | Block mints if GoPlus API fails (default: false) |
+| `DRY_RUN_MODE` | — | Force all `/mint` commands to simulate only — no transactions sent (default: false) |
 | `REDIS_URL` | — | Redis URL for persistent queue (optional) |
 
 ---
@@ -127,6 +128,7 @@ docker compose --profile redis up -d
 | `/whitelist <contract>` | Remove contract from blacklist (admin only) |
 | `/admin_stats` | Total mints, success rate, wallet balances (admin only) |
 | `/admin_reload` | Reload wallet pool from .env without restart (admin only) |
+| `/dryrun <url>` | Simulate a mint without sending a transaction |
 | `/admin_blacklist` | Show full blacklist (admin only) |
 
 ---
@@ -159,6 +161,7 @@ Telegram User
 │  → mintConfigReader                 │
 │  → calldataBuilder                  │
 │  → gasEstimator                     │
+│  → dryRun (simulation / eth_call)   │
 │  → transactionSender                │
 │  → txMonitor                        │
 └──────┬──────────────┬───────────────┘
