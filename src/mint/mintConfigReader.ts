@@ -19,6 +19,8 @@ export interface MintConfig {
 }
 
 const ZERO_ADDRESS: Address = '0x0000000000000000000000000000000000000000';
+// OpenSea protocol fee recipient used by SeaDrop V1 collections
+const OPENSEA_FEE_RECIPIENT: Address = '0x0000a26b00c1F0DF003000390027140000fAa719';
 
 export async function readMintConfig(
   nftContract: Address,
@@ -30,7 +32,7 @@ export async function readMintConfig(
 
   // Get fee recipients from SeaDrop contract
   // SeaDrop requires a valid fee recipient — address(0) will cause revert
-  let feeRecipient: Address = ZERO_ADDRESS;
+  let feeRecipient: Address = OPENSEA_FEE_RECIPIENT; // safe default
   try {
     const feeRecipients = await publicClient.readContract({
       address: seaDropAddress,
@@ -43,30 +45,10 @@ export async function readMintConfig(
       feeRecipient = feeRecipients[0];
       logger.info(`[MINT_CONFIG] Fee recipient: ${feeRecipient}`);
     } else {
-      logger.warn('[MINT_CONFIG] No fee recipients found, mint may revert');
+      logger.info(`[MINT_CONFIG] No fee recipients found, using OpenSea default: ${OPENSEA_FEE_RECIPIENT}`);
     }
   } catch {
-    // getFeeRecipients reverted — try reading creator payout address as fallback
-    try {
-      const creatorPayout = await publicClient.readContract({
-        address: seaDropAddress,
-        abi: [{
-          name: 'getCreatorPayoutAddresses',
-          type: 'function',
-          stateMutability: 'view',
-          inputs: [{ name: 'nftContract', type: 'address' }],
-          outputs: [{ name: '', type: 'address[]' }],
-        }],
-        functionName: 'getCreatorPayoutAddresses',
-        args: [nftContract],
-      }) as Address[];
-      if (creatorPayout.length > 0 && creatorPayout[0] && creatorPayout[0] !== ZERO_ADDRESS) {
-        feeRecipient = creatorPayout[0];
-        logger.info(`[MINT_CONFIG] Using creator payout as fee recipient: ${feeRecipient}`);
-      }
-    } catch {
-      logger.warn('[MINT_CONFIG] Could not get fee recipient from any source, using address(0)');
-    }
+    logger.info(`[MINT_CONFIG] getFeeRecipients reverted, using OpenSea default fee recipient: ${OPENSEA_FEE_RECIPIENT}`);
   }
 
   // Get mint stats from SeaDrop contract — MUST use 2-param version on SeaDrop, not NFT contract

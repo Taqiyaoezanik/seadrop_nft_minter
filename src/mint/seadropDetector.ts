@@ -65,19 +65,6 @@ async function getPublicDropFromSeaDrop(
   nftContract: Address
 ): Promise<PublicDrop | null> {
   try {
-    // Validate the contract is actually registered on this SeaDrop instance
-    // by calling getMintStats — it reverts for unregistered contracts
-    await publicClient.readContract({
-      address: seaDropAddress,
-      abi: SeaDropV1Abi,
-      functionName: 'getMintStats',
-      args: [nftContract, nftContract], // dummy minter address, just checking revert
-    });
-  } catch {
-    return null; // not registered on this SeaDrop
-  }
-
-  try {
     const result = await publicClient.readContract({
       address: seaDropAddress,
       abi: SeaDropV1Abi,
