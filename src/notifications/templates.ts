@@ -103,7 +103,7 @@ export function dryRunReport(params: {
   quantity?: number;
   mintPriceEth?: string;
   gasEstimateEth?: string;
-  checks: { name: string; passed: boolean; detail?: string }[];
+  checks: { name: string; passed: boolean; skipped?: boolean; detail?: string }[];
   simulationRan: boolean;
   simulationSuccess: boolean;
   revertReason?: string;
@@ -122,9 +122,10 @@ export function dryRunReport(params: {
     params.gasEstimateEth ? `Gas Estimate: <b>${params.gasEstimateEth} ETH</b>` : null,
   ].filter((line): line is string => line !== null);
 
-  const checkLines = params.checks.map(
-    (c) => `${c.passed ? '✅' : '❌'} ${c.name}${c.detail ? ` — <i>${c.detail}</i>` : ''}`
-  );
+  const checkLines = params.checks.map((c) => {
+    const icon = c.skipped ? '⏭' : c.passed ? '✅' : '❌';
+    return `${icon} ${c.name}${c.detail ? ` — <i>${c.detail}</i>` : ''}`;
+  });
 
   const simulation = !params.simulationRan
     ? '⏭ Skipped — pipeline failed before simulation'
