@@ -20,6 +20,7 @@ export async function startCommand(ctx: Context): Promise<void> {
     `Total: ${total} | Idle: ${idle} | Busy: ${busy}\n\n` +
     `<b>\ud83d\udee0 Quick Commands</b>\n` +
     `/mint &lt;opensea_url&gt; \u2014 Start a mint job\n` +
+    `/mint_max &lt;opensea_url&gt; \u2014 Mint max quantity\n` +
     `/wallets \u2014 View wallet pool\n` +
     `/settings \u2014 View your settings\n` +
     `/help \u2014 All commands\n\n` +
@@ -33,6 +34,7 @@ export async function helpCommand(ctx: Context): Promise<void> {
     `<b>\ud83d\udcd6 Available Commands</b>\n\n` +
     `<b>Minting</b>\n` +
     `/mint &lt;url&gt; \u2014 Mint from OpenSea collection URL\n` +
+    `/mint_max &lt;url&gt; \u2014 Mint maximum allowed quantity\n` +
     `/status \u2014 Show active mint jobs\n` +
     `/history \u2014 Last 20 mint transactions\n` +
     `/cancel &lt;job_id&gt; \u2014 Cancel a pending job\n\n` +
