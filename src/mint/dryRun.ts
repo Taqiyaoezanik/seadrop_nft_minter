@@ -201,6 +201,7 @@ export async function runDryRun(telegramId: string, url: string): Promise<DryRun
     const checksBeforeGas = checks.every((c) => c.passed);
     if (!checksBeforeGas) {
       logger.info(`[DRY_RUN] Skipping gas estimate — prior checks failed`);
+      checks.push({ name: 'Gas estimate within limit', passed: false, detail: 'Skipped — prior check failed' });
     } else {
       try {
         const gasEstimate = await estimateGas(calldata, walletAddress, userSettings.max_gas_eth);
