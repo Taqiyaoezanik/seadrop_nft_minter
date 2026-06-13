@@ -15,11 +15,20 @@ import { getUserSettings } from '../db/users';
 import { config } from '../config';
 import { logger } from '../utils/logger';
 
+export interface WalletRange {
+  /** 1-based index of the first wallet to use (inclusive) */
+  from: number;
+  /** 1-based index of the last wallet to use (inclusive) */
+  to: number;
+}
+
 export interface MintJobInput {
   telegramId: string;
   url: string;
   jobId: string; // jobId created by mintCommand before queuing
   forceMaxQuantity?: boolean; // if true, mint up to maxTotalMintableByWallet
+  /** When set, only wallets within this 1-based index range are eligible */
+  walletRange?: WalletRange;
 }
 
 export interface MintEngineResult {
@@ -98,9 +107,14 @@ export async function runMintJob(
 
     // Step 5: Read full mint config (feeRecipients + getMintStats from SeaDrop contract)
     // We need walletAddress for getMintStats — acquire wallet first
-    const wallet = walletPool.acquireWallet();
+    const wallet = input.walletRange
+      ? walletPool.acquireWalletInRange(input.walletRange.from, input.walletRange.to)
+      : walletPool.acquireWallet();
     if (!wallet) {
-      return fail('No available wallets in pool. All wallets are busy.');
+      const rangeMsg = input.walletRange
+        ? ` in wallet range ${input.walletRange.from}-${input.walletRange.to}`
+        : '';
+      return fail(`No available wallets${rangeMsg}. All wallets are busy.`);
     }
 
     updateJobStatus(jobId, 'PROCESSING', {
