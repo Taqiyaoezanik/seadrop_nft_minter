@@ -11,7 +11,8 @@ export interface MintCalldata {
 
 export function buildMintCalldata(
   mintConfig: MintConfig,
-  quantity: number
+  quantity: number,
+  walletAddress: Address
 ): MintCalldata {
   const { seaDropAddress, nftContractAddress, feeRecipient, publicDrop } = mintConfig;
 
@@ -21,7 +22,7 @@ export function buildMintCalldata(
     args: [
       nftContractAddress,
       feeRecipient,
-      '0x0000000000000000000000000000000000000000' as Address,
+      walletAddress, // minterIfNotPayer = wallet = payer, standard case
       BigInt(quantity),
     ],
   });
