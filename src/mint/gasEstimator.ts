@@ -46,7 +46,7 @@ export async function estimateGas(
   const totalGasCostEth = formatEther(totalGasCostWei);
 
   logger.info(
-    `[GAS] baseFee: ${baseFee}, maxFeePerGas: ${maxFeePerGas}, gasLimit: ${gasLimit}, total: ${totalGasCostEth} ETH`
+    `[GAS] maxFeePerGas: ${maxFeePerGas}, gasLimit: ${gasLimit}, total: ${totalGasCostEth} ETH`
   );
 
   // Check against user max gas setting
