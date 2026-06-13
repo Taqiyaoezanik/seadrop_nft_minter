@@ -194,31 +194,37 @@ export async function runDryRun(telegramId: string, url: string): Promise<DryRun
     });
 
     // Step 11: Build calldata + gas estimate
+    // Skip if any prior check already failed — estimateGas does an on-chain simulation
+    // internally and will produce misleading revert reasons when earlier checks are the
+    // real cause of failure (e.g. per-wallet limit exhausted, mint not yet active).
     const calldata = buildMintCalldata(mintConfig, quantity, walletAddress);
-    let gasCheckPassed = false;
-    try {
-      const gasEstimate = await estimateGas(calldata, walletAddress, userSettings.max_gas_eth);
-      result.gasEstimateEth = gasEstimate.totalGasCostEth;
-      gasCheckPassed = true;
-      checks.push({
-        name: 'Gas estimate within limit',
-        passed: true,
-        detail: `${gasEstimate.totalGasCostEth} ETH (limit ${userSettings.max_gas_eth} ETH)`,
-      });
-    } catch (err) {
-      const reason = extractRevertReason(err);
-      logger.warn(`[DRY_RUN] Gas estimate failed: ${reason}`);
-      checks.push({
-        name: 'Gas estimate within limit',
-        passed: false,
-        detail: reason,
-      });
+    const checksBeforeGas = checks.every((c) => c.passed);
+    if (!checksBeforeGas) {
+      logger.info(`[DRY_RUN] Skipping gas estimate — prior checks failed`);
+    } else {
+      try {
+        const gasEstimate = await estimateGas(calldata, walletAddress, userSettings.max_gas_eth);
+        result.gasEstimateEth = gasEstimate.totalGasCostEth;
+        checks.push({
+          name: 'Gas estimate within limit',
+          passed: true,
+          detail: `${gasEstimate.totalGasCostEth} ETH (limit ${userSettings.max_gas_eth} ETH)`,
+        });
+      } catch (err) {
+        const reason = extractRevertReason(err);
+        logger.warn(`[DRY_RUN] Gas estimate failed: ${reason}`);
+        checks.push({
+          name: 'Gas estimate within limit',
+          passed: false,
+          detail: reason,
+        });
+      }
     }
 
     // Step 12: On-chain simulation via eth_call — NO transaction is broadcast
-    // Skip if any prior check already failed (avoids misleading revert reasons)
-    const priorChecksPassed = checks.every((c) => c.passed);
-    if (!priorChecksPassed) {
+    // Only run when all prior checks passed.
+    const checksBeforeSimulation = checks.every((c) => c.passed);
+    if (!checksBeforeSimulation) {
       logger.info(`[DRY_RUN] Skipping eth_call — prior checks failed`);
       result.simulationRan = false;
     } else {
