@@ -34,6 +34,9 @@ const envSchema = z.object({
   // GoPlus
   GOPLUS_STRICT_MODE: z.string().default('false'),
 
+  // Dry run — when true, every /mint command runs as a simulation
+  DRY_RUN_MODE: z.string().default('false'),
+
 });
 
 function loadWalletKeys(): string[] {

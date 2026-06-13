@@ -93,3 +93,50 @@ export function notifyLowBalance(params: {
     `Please top up this wallet to continue minting.`
   );
 }
+
+export function dryRunReport(params: {
+  ok: boolean;
+  collectionName?: string;
+  contractAddress?: string;
+  seaDropVersion?: string;
+  phase: string;
+  quantity?: number;
+  mintPriceEth?: string;
+  gasEstimateEth?: string;
+  checks: { name: string; passed: boolean; detail?: string }[];
+  simulationRan: boolean;
+  simulationSuccess: boolean;
+  revertReason?: string;
+}): string {
+  const header = params.ok
+    ? `🧪 <b>Dry-Run Result: PASS</b> ✅`
+    : `🧪 <b>Dry-Run Result: FAIL</b> ❌`;
+
+  const infoLines = [
+    params.collectionName ? `Collection: <b>${params.collectionName}</b>` : null,
+    params.contractAddress ? `Contract: <code>${params.contractAddress}</code>` : null,
+    params.seaDropVersion ? `SeaDrop: <b>${params.seaDropVersion}</b>` : null,
+    `Phase: <b>${params.phase}</b>`,
+    params.quantity !== undefined ? `Quantity: <b>${params.quantity}</b>` : null,
+    params.mintPriceEth ? `Mint Price: <b>${params.mintPriceEth} ETH</b>` : null,
+    params.gasEstimateEth ? `Gas Estimate: <b>${params.gasEstimateEth} ETH</b>` : null,
+  ].filter((line): line is string => line !== null);
+
+  const checkLines = params.checks.map(
+    (c) => `${c.passed ? '✅' : '❌'} ${c.name}${c.detail ? ` — <i>${c.detail}</i>` : ''}`
+  );
+
+  const simulation = !params.simulationRan
+    ? '⏭ Skipped — pipeline failed before simulation'
+    : params.simulationSuccess
+      ? '✅ Transaction would succeed on-chain'
+      : `❌ Transaction would revert: <i>${params.revertReason ?? 'unknown reason'}</i>`;
+
+  return (
+    `${header}\n\n` +
+    `${infoLines.join('\n')}\n\n` +
+    `<b>Checks</b>\n${checkLines.join('\n')}\n\n` +
+    `<b>Simulation</b>\n${simulation}\n\n` +
+    `<i>No transaction was sent. Wallet pool was not modified.</i>`
+  );
+}
