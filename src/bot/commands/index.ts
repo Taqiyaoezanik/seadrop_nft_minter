@@ -3,7 +3,7 @@ import { startCommand, helpCommand } from './start';
 import { mintCommand, mintMaxCommand, statusCommand, historyCommand, cancelCommand } from './mint';
 import { dryRunCommand, executeDryRun } from './dryrun';
 import { walletsCommand } from './wallet';
-import { settingsCommand, setMaxPriceCommand, setMaxGasCommand, setQuantityCommand } from './settings';
+import { settingsCommand, setMaxPriceCommand, setMaxGasCommand, setQuantityCommand, setPriorityFeeCommand } from './settings';
 import {
   adminStatsCommand,
   adminReloadCommand,
@@ -56,6 +56,7 @@ export function registerCommands(bot: Telegraf<Context>): void {
   bot.command('set_maxprice', setMaxPriceCommand);
   bot.command('set_maxgas', setMaxGasCommand);
   bot.command('set_quantity', setQuantityCommand);
+  bot.command('set_priorityfee', setPriorityFeeCommand);
 
   bot.command('blacklist', adminOnly(), blacklistCommand);
   bot.command('whitelist', adminOnly(), whitelistCommand);

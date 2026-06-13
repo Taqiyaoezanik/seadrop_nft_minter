@@ -1,12 +1,14 @@
 import type { Context } from 'telegraf';
 import { getOrCreateUser, getUserSettings, updateUserSettings } from '../../db/users';
 import { config } from '../../config';
+export type { UserSettings } from '../../db/users';
 
 function getDefaults() {
   return {
     max_mint_price_eth: config.mint.defaultMaxMintPriceEth,
     max_gas_eth: config.mint.defaultMaxGasEth,
     quantity: config.mint.defaultQuantity,
+    priority_fee_gwei: config.mint.maxPriorityFeeGwei,
   };
 }
 
@@ -19,8 +21,9 @@ export async function settingsCommand(ctx: Context): Promise<void> {
     `<b>\u2699\ufe0f Your Settings</b>\n\n` +
     `Max Mint Price: <b>${settings.max_mint_price_eth} ETH</b>\n` +
     `Max Gas Fee: <b>${settings.max_gas_eth} ETH</b>\n` +
-    `Quantity per Job: <b>${settings.quantity}</b>\n\n` +
-    `<i>Use /set_maxprice, /set_maxgas, /set_quantity to change.</i>`,
+    `Quantity per Job: <b>${settings.quantity}</b>\n` +
+    `Priority Fee: <b>${settings.priority_fee_gwei} gwei</b>\n\n` +
+    `<i>Use /set_maxprice, /set_maxgas, /set_quantity, /set_priorityfee to change.</i>`,
     { parse_mode: 'HTML' }
   );
 }
@@ -55,6 +58,28 @@ export async function setMaxGasCommand(ctx: Context): Promise<void> {
   getOrCreateUser(telegramId, ctx.from?.username);
   updateUserSettings(telegramId, { max_gas_eth: value }, getDefaults());
   await ctx.reply(`\u2705 Max gas fee set to <b>${value} ETH</b>`, { parse_mode: 'HTML' });
+}
+
+export async function setPriorityFeeCommand(ctx: Context): Promise<void> {
+  const telegramId = ctx.from?.id?.toString() ?? '';
+  const text = ctx.message && 'text' in ctx.message ? ctx.message.text : '';
+  const parts = text.trim().split(/\s+/);
+  const value = parts[1];
+  const fee = parseFloat(value ?? '');
+
+  if (!value || isNaN(fee) || fee < 0) {
+    await ctx.reply(
+      '\u274c Usage: /set_priorityfee &lt;gwei&gt;\n' +
+      'Example: /set_priorityfee 0.1\n' +
+      '(Min: 0, recommended: 0.1\u20132 gwei)',
+      { parse_mode: 'HTML' }
+    );
+    return;
+  }
+
+  getOrCreateUser(telegramId, ctx.from?.username);
+  updateUserSettings(telegramId, { priority_fee_gwei: fee }, getDefaults());
+  await ctx.reply(`\u2705 Priority fee set to <b>${fee} gwei</b>`, { parse_mode: 'HTML' });
 }
 
 export async function setQuantityCommand(ctx: Context): Promise<void> {

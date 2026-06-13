@@ -66,6 +66,7 @@ export async function runDryRun(telegramId: string, url: string): Promise<DryRun
     max_mint_price_eth: config.mint.defaultMaxMintPriceEth,
     max_gas_eth: config.mint.defaultMaxGasEth,
     quantity: config.mint.defaultQuantity,
+    priority_fee_gwei: config.mint.maxPriorityFeeGwei,
   });
 
   // Step 1: Parse URL
@@ -205,7 +206,7 @@ export async function runDryRun(telegramId: string, url: string): Promise<DryRun
       checks.push({ name: 'Gas estimate within limit', passed: false, skipped: true, detail: 'Prior check failed' });
     } else {
       try {
-        const gasEstimate = await estimateGas(calldata, walletAddress, userSettings.max_gas_eth);
+        const gasEstimate = await estimateGas(calldata, walletAddress, userSettings.max_gas_eth, userSettings.priority_fee_gwei);
         result.gasEstimateEth = gasEstimate.totalGasCostEth;
         checks.push({
           name: 'Gas estimate within limit',

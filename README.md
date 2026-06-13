@@ -124,6 +124,7 @@ docker compose --profile redis up -d
 | `/set_maxprice <eth>` | Set max mint price (e.g. `/set_maxprice 0.05`) |
 | `/set_maxgas <eth>` | Set max gas fee (e.g. `/set_maxgas 0.01`) |
 | `/set_quantity <n>` | Set mint quantity per job (e.g. `/set_quantity 2`) |
+| `/set_priorityfee <gwei>` | Set EIP-1559 priority fee in gwei (e.g. `/set_priorityfee 0.1`) |
 | `/blacklist <contract>` | Add contract to local blacklist (admin only) |
 | `/whitelist <contract>` | Remove contract from blacklist (admin only) |
 | `/admin_stats` | Total mints, success rate, wallet balances (admin only) |

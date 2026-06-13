@@ -4,6 +4,7 @@ export interface UserSettings {
   max_mint_price_eth: string;
   max_gas_eth: string;
   quantity: number;
+  priority_fee_gwei: number;
 }
 
 export interface User {
@@ -48,6 +49,7 @@ export function getUserSettings(telegramId: string, defaults: UserSettings): Use
       max_mint_price_eth: parsed.max_mint_price_eth ?? defaults.max_mint_price_eth,
       max_gas_eth: parsed.max_gas_eth ?? defaults.max_gas_eth,
       quantity: parsed.quantity ?? defaults.quantity,
+      priority_fee_gwei: parsed.priority_fee_gwei ?? defaults.priority_fee_gwei,
     };
   } catch {
     return defaults;

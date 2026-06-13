@@ -16,7 +16,8 @@ export interface GasEstimate {
 export async function estimateGas(
   calldata: MintCalldata,
   fromAddress: Address,
-  userMaxGasEth: string
+  userMaxGasEth: string,
+  priorityFeeGwei?: number
 ): Promise<GasEstimate> {
   logger.info(`[GAS] Estimating gas for mint tx from ${fromAddress.slice(0, 8)}...`);
 
@@ -36,7 +37,8 @@ export async function estimateGas(
   // Apply 20% buffer
   const gasLimit = (rawEstimate * 120n) / 100n;
 
-  const maxPriorityFeePerGas = BigInt(Math.ceil(config.mint.maxPriorityFeeGwei * 1_000_000_000));
+  const effectivePriorityFeeGwei = priorityFeeGwei ?? config.mint.maxPriorityFeeGwei;
+  const maxPriorityFeePerGas = BigInt(Math.ceil(effectivePriorityFeeGwei * 1_000_000_000));
   // 10% buffer on baseFee is standard EIP-1559 practice.
   // baseFee * 2 was overly conservative and inflated cost estimates ~10x on low-congestion blocks.
   const maxFeePerGas = (baseFee * 110n) / 100n + maxPriorityFeePerGas;

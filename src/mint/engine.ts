@@ -51,6 +51,7 @@ export async function runMintJob(
     max_mint_price_eth: config.mint.defaultMaxMintPriceEth,
     max_gas_eth: config.mint.defaultMaxGasEth,
     quantity: config.mint.defaultQuantity,
+    priority_fee_gwei: config.mint.maxPriorityFeeGwei,
   });
 
   logger.info(`[ENGINE] Starting mint job ${jobId} for user ${telegramId}`);
@@ -194,7 +195,7 @@ export async function runMintJob(
       // Step 11: Estimate gas
       let gasEstimate;
       try {
-        gasEstimate = await estimateGas(calldata, wallet.address, userSettings.max_gas_eth);
+        gasEstimate = await estimateGas(calldata, wallet.address, userSettings.max_gas_eth, userSettings.priority_fee_gwei);
       } catch (err) {
         walletPool.releaseWallet(wallet.address);
         return fail(err instanceof Error ? err.message : 'Gas estimation failed');
