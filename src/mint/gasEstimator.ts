@@ -32,12 +32,16 @@ export async function estimateGas(
 
   const baseFee = await getLatestBaseFee();
   const maxPriorityFeePerGas = BigInt(config.mint.maxPriorityFeeGwei) * 1_000_000_000n;
-  const maxFeePerGas = baseFee * 2n + maxPriorityFeePerGas;
+  // 10% buffer on baseFee is standard EIP-1559 practice.
+  // baseFee * 2 was overly conservative and inflated cost estimates ~10x on low-congestion blocks.
+  const maxFeePerGas = (baseFee * 110n) / 100n + maxPriorityFeePerGas;
 
   const totalGasCostWei = gasLimit * maxFeePerGas;
   const totalGasCostEth = formatEther(totalGasCostWei);
 
-  logger.info(`[GAS] Estimated gas: ${gasLimit}, maxFeePerGas: ${maxFeePerGas}, total: ${totalGasCostEth} ETH`);
+  logger.info(
+    `[GAS] baseFee: ${baseFee}, maxFeePerGas: ${maxFeePerGas}, gasLimit: ${gasLimit}, total: ${totalGasCostEth} ETH`
+  );
 
   // Check against user max gas setting
   const parsedMaxGas = parseFloat(userMaxGasEth);
