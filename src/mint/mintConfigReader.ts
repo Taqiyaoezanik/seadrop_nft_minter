@@ -29,6 +29,7 @@ export async function readMintConfig(
   logger.info(`[MINT_CONFIG] Reading mint config for ${nftContract}`);
 
   // Get fee recipients from SeaDrop contract
+  // SeaDrop requires a valid fee recipient — address(0) will cause revert
   let feeRecipient: Address = ZERO_ADDRESS;
   try {
     const feeRecipients = await publicClient.readContract({
@@ -38,16 +39,34 @@ export async function readMintConfig(
       args: [nftContract],
     }) as Address[];
 
-    if (feeRecipients.length > 0 && feeRecipients[0]) {
+    if (feeRecipients.length > 0 && feeRecipients[0] && feeRecipients[0] !== ZERO_ADDRESS) {
       feeRecipient = feeRecipients[0];
       logger.info(`[MINT_CONFIG] Fee recipient: ${feeRecipient}`);
     } else {
-      logger.info('[MINT_CONFIG] No fee recipients registered, using address(0)');
+      logger.warn('[MINT_CONFIG] No fee recipients found, mint may revert');
     }
-  } catch (err) {
-    logger.warn(
-      `[MINT_CONFIG] Failed to get fee recipients: ${err instanceof Error ? err.message : 'unknown'}, using address(0)`
-    );
+  } catch {
+    // getFeeRecipients reverted — try reading creator payout address as fallback
+    try {
+      const creatorPayout = await publicClient.readContract({
+        address: seaDropAddress,
+        abi: [{
+          name: 'getCreatorPayoutAddresses',
+          type: 'function',
+          stateMutability: 'view',
+          inputs: [{ name: 'nftContract', type: 'address' }],
+          outputs: [{ name: '', type: 'address[]' }],
+        }],
+        functionName: 'getCreatorPayoutAddresses',
+        args: [nftContract],
+      }) as Address[];
+      if (creatorPayout.length > 0 && creatorPayout[0] && creatorPayout[0] !== ZERO_ADDRESS) {
+        feeRecipient = creatorPayout[0];
+        logger.info(`[MINT_CONFIG] Using creator payout as fee recipient: ${feeRecipient}`);
+      }
+    } catch {
+      logger.warn('[MINT_CONFIG] Could not get fee recipient from any source, using address(0)');
+    }
   }
 
   // Get mint stats from SeaDrop contract — MUST use 2-param version on SeaDrop, not NFT contract
