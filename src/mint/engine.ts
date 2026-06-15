@@ -41,6 +41,255 @@ export interface MintEngineResult {
   gasUsedEth?: string;
   errorMessage?: string;
   collectionName?: string;
+  /** When multi-wallet mint is used, this contains results per wallet */
+  walletResults?: Array<{
+    walletIndex: number;
+    walletAddress: string;
+    status: 'CONFIRMED' | 'FAILED' | 'DROPPED' | 'CANCELLED';
+    txHash?: string;
+    tokenIds?: string[];
+    gasUsedEth?: string;
+    errorMessage?: string;
+  }>;
+}
+
+/**
+ * Execute mint for a single wallet. Separated for multi-wallet loop support.
+ */
+async function executeSingleWalletMint(
+  input: MintJobInput,
+  collection: { collectionName: string; collectionSlug: string; contractAddress: string },
+  contractAddress: `0x${string}`,
+  walletIndex: number | null,
+  onStatusUpdate?: (jobId: string, message: string) => Promise<void>
+): Promise<Omit<MintEngineResult, 'jobId' | 'collectionName'>> {
+  const { telegramId, jobId } = input;
+  const userSettings = getUserSettings(telegramId, {
+    max_mint_price_eth: config.mint.defaultMaxMintPriceEth,
+    max_gas_eth: config.mint.defaultMaxGasEth,
+    quantity: config.mint.defaultQuantity,
+    priority_fee_gwei: config.mint.maxPriorityFeeGwei,
+  });
+
+  const fail = (reason: string) => ({
+    status: 'FAILED' as const,
+    errorMessage: reason,
+  });
+
+  // Check if collection is an OpenSea Drop
+  const dropInfo = collection.collectionSlug ? await checkIfDrop(collection.collectionSlug) : null;
+
+  if (dropInfo && dropInfo.is_minting) {
+    // ===== OPENSEA DROPS API PATH =====
+    logger.info(`[ENGINE] Using OpenSea Drops API for ${collection.collectionSlug}`);
+
+    const wallet = walletIndex !== null
+      ? walletPool.acquireWalletByIndex(walletIndex)
+      : (input.walletRange
+        ? walletPool.acquireWalletInRange(input.walletRange.from, input.walletRange.to)
+        : walletPool.acquireWallet());
+
+    if (!wallet) {
+      return fail(`No available wallet${walletIndex !== null ? ` at index ${walletIndex}` : ''}`);
+    }
+
+    const walletDesc = walletIndex !== null ? `wallet ${walletIndex} (${wallet.address.slice(0, 8)}...)` : wallet.address.slice(0, 8);
+
+    try {
+      const quantity = input.forceMaxQuantity
+        ? parseInt(dropInfo.active_stage?.max_per_wallet ?? '1')
+        : Math.min(userSettings.quantity, parseInt(dropInfo.active_stage?.max_per_wallet ?? '1'));
+
+      const mintTxResult = await buildDropMintTransaction(collection.collectionSlug, wallet.address, quantity);
+
+      if (!mintTxResult.success) {
+        if (mintTxResult.error.code === 'SERVER_ERROR') {
+          logger.warn(`[ENGINE] OpenSea Drops API unavailable for ${walletDesc}, falling back`);
+          walletPool.releaseWallet(wallet.address);
+          // Fall through to manual detection
+        } else {
+          walletPool.releaseWallet(wallet.address);
+          return fail(mintTxResult.error.message);
+        }
+      } else {
+        const { to, data, value } = mintTxResult.data;
+        const mintPriceWei = BigInt(value);
+        const mintPriceEth = formatEther(mintPriceWei);
+        const parsedMaxPrice = parseFloat(userSettings.max_mint_price_eth);
+        const userMaxPriceWei = BigInt(Math.floor((isNaN(parsedMaxPrice) ? 0 : parsedMaxPrice) * 1e18));
+
+        if (mintPriceWei > userMaxPriceWei) {
+          walletPool.releaseWallet(wallet.address);
+          return fail(`Mint price (${mintPriceEth} ETH) exceeds max (${userSettings.max_mint_price_eth} ETH)`);
+        }
+
+        const dropCalldata = { to, data, value: mintPriceWei };
+        let gasEstimate;
+        try {
+          gasEstimate = await estimateGas(dropCalldata, wallet.address, userSettings.max_gas_eth, userSettings.priority_fee_gwei);
+        } catch (err) {
+          walletPool.releaseWallet(wallet.address);
+          return fail(err instanceof Error ? err.message : 'Gas estimation failed');
+        }
+
+        const privateKey = walletPool.getPrivateKey(wallet.address);
+        if (!privateKey) {
+          walletPool.releaseWallet(wallet.address);
+          return fail('Could not retrieve private key');
+        }
+
+        let txHash: `0x${string}`;
+        try {
+          const result = await sendMintTransaction(dropCalldata, privateKey, gasEstimate);
+          txHash = result.txHash;
+          logger.info(`[ENGINE] Tx sent for ${walletDesc}: ${txHash}`);
+        } catch (err) {
+          walletPool.releaseWallet(wallet.address);
+          return fail(err instanceof Error ? err.message : 'Failed to send transaction');
+        }
+
+        const monitorResult = await monitorTransaction(txHash, contractAddress);
+        walletPool.releaseWallet(wallet.address);
+
+        if (monitorResult.status === 'CONFIRMED') {
+          return {
+            status: 'CONFIRMED',
+            txHash,
+            tokenIds: monitorResult.tokenIds,
+            gasUsedEth: monitorResult.gasUsedEth,
+          };
+        } else {
+          return {
+            status: monitorResult.status,
+            txHash,
+            errorMessage: monitorResult.status === 'DROPPED'
+              ? 'Transaction timed out'
+              : 'Transaction reverted on-chain',
+          };
+        }
+      }
+    } catch (err) {
+      walletPool.releaseWallet(wallet.address);
+      throw err;
+    }
+  }
+
+  // ===== FALLBACK: MANUAL SEADROP DETECTION =====
+  logger.info(`[ENGINE] Using manual SeaDrop detection for ${contractAddress}`);
+
+  const seaDropTarget = await detectActiveSeaDrop(contractAddress);
+  if (!seaDropTarget) {
+    return fail('Not a SeaDrop collection or no active public drop found');
+  }
+
+  const wallet = walletIndex !== null
+    ? walletPool.acquireWalletByIndex(walletIndex)
+    : (input.walletRange
+      ? walletPool.acquireWalletInRange(input.walletRange.from, input.walletRange.to)
+      : walletPool.acquireWallet());
+
+  if (!wallet) {
+    return fail(`No available wallet${walletIndex !== null ? ` at index ${walletIndex}` : ''}`);
+  }
+
+  const walletDesc = walletIndex !== null ? `wallet ${walletIndex} (${wallet.address.slice(0, 8)}...)` : wallet.address.slice(0, 8);
+
+  try {
+    const mintConfig = await readMintConfig(
+      contractAddress,
+      seaDropTarget.address,
+      wallet.address,
+      seaDropTarget.publicDrop
+    );
+
+    const now = BigInt(Math.floor(Date.now() / 1000));
+    if (mintConfig.publicDrop.startTime > now) {
+      walletPool.releaseWallet(wallet.address);
+      return fail(`Mint has not started yet`);
+    }
+    if (mintConfig.publicDrop.endTime > 0n && mintConfig.publicDrop.endTime < now) {
+      walletPool.releaseWallet(wallet.address);
+      return fail('Mint has ended');
+    }
+
+    if (
+      mintConfig.mintStats.maxSupply > 0n &&
+      mintConfig.mintStats.currentTotalSupply >= mintConfig.mintStats.maxSupply
+    ) {
+      walletPool.releaseWallet(wallet.address);
+      return fail('Mint supply is exhausted');
+    }
+
+    const remainingMints =
+      mintConfig.publicDrop.maxTotalMintableByWallet -
+      Number(mintConfig.mintStats.minterNumMinted);
+
+    if (remainingMints <= 0) {
+      walletPool.releaseWallet(wallet.address);
+      return fail(`Wallet has reached max mint limit (${mintConfig.publicDrop.maxTotalMintableByWallet})`);
+    }
+
+    const quantity = input.forceMaxQuantity
+      ? remainingMints
+      : Math.min(userSettings.quantity, remainingMints);
+
+    const mintPriceEth = formatEther(mintConfig.publicDrop.mintPrice);
+    const parsedMaxPrice = parseFloat(userSettings.max_mint_price_eth);
+    const userMaxPriceWei = BigInt(Math.floor((isNaN(parsedMaxPrice) ? 0 : parsedMaxPrice) * 1e18));
+    if (mintConfig.publicDrop.mintPrice > userMaxPriceWei) {
+      walletPool.releaseWallet(wallet.address);
+      return fail(`Mint price (${mintPriceEth} ETH) exceeds max (${userSettings.max_mint_price_eth} ETH)`);
+    }
+
+    const calldata = buildMintCalldata(mintConfig, quantity, wallet.address);
+
+    let gasEstimate;
+    try {
+      gasEstimate = await estimateGas(calldata, wallet.address, userSettings.max_gas_eth, userSettings.priority_fee_gwei);
+    } catch (err) {
+      walletPool.releaseWallet(wallet.address);
+      return fail(err instanceof Error ? err.message : 'Gas estimation failed');
+    }
+
+    const privateKey = walletPool.getPrivateKey(wallet.address);
+    if (!privateKey) {
+      walletPool.releaseWallet(wallet.address);
+      return fail('Could not retrieve private key');
+    }
+
+    let txHash: `0x${string}`;
+    try {
+      const result = await sendMintTransaction(calldata, privateKey, gasEstimate);
+      txHash = result.txHash;
+      logger.info(`[ENGINE] Tx sent for ${walletDesc}: ${txHash}`);
+    } catch (err) {
+      walletPool.releaseWallet(wallet.address);
+      return fail(err instanceof Error ? err.message : 'Failed to send transaction');
+    }
+
+    const monitorResult = await monitorTransaction(txHash, contractAddress);
+    walletPool.releaseWallet(wallet.address);
+
+    if (monitorResult.status === 'CONFIRMED') {
+      return {
+        status: 'CONFIRMED',
+        txHash,
+        tokenIds: monitorResult.tokenIds,
+        gasUsedEth: monitorResult.gasUsedEth,
+      };
+    } else {
+      return {
+        status: monitorResult.status,
+        txHash,
+        errorMessage: monitorResult.status === 'DROPPED'
+          ? 'Transaction timed out'
+          : 'Transaction reverted on-chain',
+      };
+    }
+  } catch (err) {
+    walletPool.releaseWallet(wallet.address);
+    throw err;
+  }
 }
 
 export async function runMintJob(
@@ -48,13 +297,6 @@ export async function runMintJob(
   onStatusUpdate?: (jobId: string, message: string) => Promise<void>
 ): Promise<MintEngineResult> {
   const { telegramId, url, jobId } = input;
-
-  const userSettings = getUserSettings(telegramId, {
-    max_mint_price_eth: config.mint.defaultMaxMintPriceEth,
-    max_gas_eth: config.mint.defaultMaxGasEth,
-    quantity: config.mint.defaultQuantity,
-    priority_fee_gwei: config.mint.maxPriorityFeeGwei,
-  });
 
   logger.info(`[ENGINE] Starting mint job ${jobId} for user ${telegramId}`);
   logAction(telegramId, 'MINT_START', { jobId, url });
@@ -102,314 +344,129 @@ export async function runMintJob(
       return fail(validationError);
     }
 
-    // Step 4: Check if collection is an OpenSea Drop (supports public + WL mints via API)
-    const dropInfo = collection.collectionSlug ? await checkIfDrop(collection.collectionSlug) : null;
+    // ===== MULTI-WALLET LOOP SUPPORT =====
+    if (input.walletRange) {
+      const { from, to } = input.walletRange;
+      const walletCount = to - from + 1;
+      logger.info(`[ENGINE] Multi-wallet mint: executing ${walletCount} mints (wallets ${from}-${to})`);
 
-    if (dropInfo && dropInfo.is_minting) {
-      // ===== OPENSEA DROPS API PATH (Auto-handles public + WL mints) =====
-      logger.info(`[ENGINE] Using OpenSea Drops API for ${collection.collectionSlug}`);
+      const walletResults: NonNullable<MintEngineResult['walletResults']> = [];
 
-      // Acquire wallet
-      const wallet = input.walletRange
-        ? walletPool.acquireWalletInRange(input.walletRange.from, input.walletRange.to)
-        : walletPool.acquireWallet();
-      if (!wallet) {
-        const rangeMsg = input.walletRange
-          ? ` in wallet range ${input.walletRange.from}-${input.walletRange.to}`
-          : '';
-        return fail(`No available wallets${rangeMsg}. All wallets are busy.`);
-      }
+      for (let i = from; i <= to; i++) {
+        logger.info(`[ENGINE] Processing wallet ${i}/${to}`);
 
-      updateJobStatus(jobId, 'PROCESSING', {
-        wallet_address: wallet.address,
-      });
+        try {
+          const result = await executeSingleWalletMint(
+            input,
+            collection,
+            contractAddress,
+            i,
+            onStatusUpdate
+          );
 
-      if (onStatusUpdate) {
-        await onStatusUpdate(jobId, 'processing');
-      }
+          const wallet = walletPool.getWalletByIndex(i);
+          walletResults.push({
+            walletIndex: i,
+            walletAddress: wallet?.address ?? 'unknown',
+            status: result.status,
+            txHash: result.txHash,
+            tokenIds: result.tokenIds,
+            gasUsedEth: result.gasUsedEth,
+            errorMessage: result.errorMessage,
+          });
 
-      try {
-        // Determine quantity
-        const quantity = input.forceMaxQuantity
-          ? parseInt(dropInfo.active_stage?.max_per_wallet ?? '1')
-          : Math.min(userSettings.quantity, parseInt(dropInfo.active_stage?.max_per_wallet ?? '1'));
-
-        // Get mint transaction data from OpenSea API (handles signature for WL automatically)
-        const mintTxResult = await buildDropMintTransaction(collection.collectionSlug, wallet.address, quantity);
-
-        if (!mintTxResult.success) {
-          // If server error, fallback to manual detection instead of failing
-          if (mintTxResult.error.code === 'SERVER_ERROR') {
-            logger.warn(`[ENGINE] OpenSea Drops API unavailable, falling back to manual detection`);
-            walletPool.releaseWallet(wallet.address);
-            // Continue to fallback path below
+          if (result.status === 'CONFIRMED') {
+            logger.info(`[ENGINE] Wallet ${i} mint CONFIRMED: ${result.txHash}`);
           } else {
-            walletPool.releaseWallet(wallet.address);
-            return fail(mintTxResult.error.message);
+            logger.warn(`[ENGINE] Wallet ${i} mint ${result.status}: ${result.errorMessage}`);
           }
-        } else {
-          const { to, data, value } = mintTxResult.data;
-
-          // Validate mint price
-          const mintPriceWei = BigInt(value);
-          const mintPriceEth = formatEther(mintPriceWei);
-          const parsedMaxPrice = parseFloat(userSettings.max_mint_price_eth);
-          const userMaxPriceWei = BigInt(Math.floor((isNaN(parsedMaxPrice) ? 0 : parsedMaxPrice) * 1e18));
-
-          if (mintPriceWei > userMaxPriceWei) {
-            walletPool.releaseWallet(wallet.address);
-            return fail(
-              `Mint price (${mintPriceEth} ETH) exceeds your max price limit ` +
-              `(${userSettings.max_mint_price_eth} ETH). Use /set_maxprice to increase.`
-            );
-          }
-
-          updateJobStatus(jobId, 'PROCESSING', { mint_price_eth: mintPriceEth });
-
-          // Estimate gas for Drop transaction
-          const dropCalldata = { to, data, value: mintPriceWei };
-          let gasEstimate;
-          try {
-            gasEstimate = await estimateGas(dropCalldata, wallet.address, userSettings.max_gas_eth, userSettings.priority_fee_gwei);
-          } catch (err) {
-            walletPool.releaseWallet(wallet.address);
-            return fail(err instanceof Error ? err.message : 'Gas estimation failed');
-          }
-
-          // Send transaction
-          const privateKey = walletPool.getPrivateKey(wallet.address);
-          if (!privateKey) {
-            walletPool.releaseWallet(wallet.address);
-            return fail('Could not retrieve wallet private key');
-          }
-
-          let txHash: `0x${string}`;
-          try {
-            const result = await sendMintTransaction(dropCalldata, privateKey, gasEstimate);
-            txHash = result.txHash;
-          } catch (err) {
-            walletPool.releaseWallet(wallet.address);
-            return fail(err instanceof Error ? err.message : 'Failed to send transaction');
-          }
-
-          updateJobStatus(jobId, 'PROCESSING', { tx_hash: txHash });
-
-          if (onStatusUpdate) {
-            await onStatusUpdate(jobId, 'monitoring');
-          }
-
-          // Monitor transaction
-          const monitorResult = await monitorTransaction(txHash, contractAddress);
-          walletPool.releaseWallet(wallet.address);
-
-          if (monitorResult.status === 'CONFIRMED') {
-            updateJobStatus(jobId, 'CONFIRMED', {
-              tx_hash: txHash,
-              token_ids: monitorResult.tokenIds,
-              gas_used_eth: monitorResult.gasUsedEth,
-            });
-            logAction(telegramId, 'MINT_CONFIRMED', { jobId, txHash });
-            return {
-              jobId,
-              status: 'CONFIRMED',
-              txHash,
-              tokenIds: monitorResult.tokenIds,
-              gasUsedEth: monitorResult.gasUsedEth,
-              collectionName: collection.collectionName,
-            };
-          } else {
-            updateJobStatus(jobId, monitorResult.status, {
-              tx_hash: txHash,
-              error_message:
-                monitorResult.status === 'DROPPED'
-                  ? 'Transaction timed out — check Etherscan for status'
-                  : 'Transaction reverted on-chain',
-            });
-            return {
-              jobId,
-              status: monitorResult.status,
-              txHash,
-              errorMessage:
-                monitorResult.status === 'DROPPED'
-                  ? 'Transaction timed out — check Etherscan for status'
-                  : 'Transaction reverted on-chain',
-              collectionName: collection.collectionName,
-            };
-          }
+        } catch (err) {
+          const wallet = walletPool.getWalletByIndex(i);
+          const errorMsg = err instanceof Error ? err.message : 'Unknown error';
+          logger.error(`[ENGINE] Wallet ${i} mint error: ${errorMsg}`);
+          walletResults.push({
+            walletIndex: i,
+            walletAddress: wallet?.address ?? 'unknown',
+            status: 'FAILED',
+            errorMessage: errorMsg,
+          });
         }
-      } catch (err) {
-        walletPool.releaseWallet(wallet.address);
-        throw err;
+      }
+
+      // Aggregate results
+      const successCount = walletResults.filter(r => r.status === 'CONFIRMED').length;
+      const failedCount = walletResults.filter(r => r.status === 'FAILED').length;
+
+      if (successCount > 0) {
+        const firstSuccess = walletResults.find(r => r.status === 'CONFIRMED');
+        updateJobStatus(jobId, 'CONFIRMED', {
+          tx_hash: firstSuccess?.txHash,
+          token_ids: walletResults.flatMap(r => r.tokenIds ?? []),
+        });
+        logAction(telegramId, 'MINT_CONFIRMED', { jobId, walletResults });
+        return {
+          jobId,
+          status: 'CONFIRMED',
+          txHash: firstSuccess?.txHash,
+          tokenIds: walletResults.flatMap(r => r.tokenIds ?? []),
+          collectionName: collection.collectionName,
+          walletResults,
+        };
+      } else {
+        updateJobStatus(jobId, 'FAILED', {
+          error_message: `All ${walletCount} wallets failed to mint`,
+        });
+        return {
+          jobId,
+          status: 'FAILED',
+          errorMessage: `All ${walletCount} wallets failed to mint`,
+          collectionName: collection.collectionName,
+          walletResults,
+        };
       }
     }
 
-    // ===== FALLBACK: MANUAL ON-CHAIN DETECTION PATH (current method) =====
-    logger.info(`[ENGINE] Using manual SeaDrop detection for ${contractAddress}`);
-
-    // Step 4: Detect active SeaDrop (supportsInterface + getAllowedSeaDrop + probe active drop)
-    const seaDropTarget = await detectActiveSeaDrop(contractAddress);
-    if (!seaDropTarget) {
-      return fail('Not a SeaDrop collection or no active public drop found');
-    }
-
-    // Step 5: Read full mint config (feeRecipients + getMintStats from SeaDrop contract)
-    // We need walletAddress for getMintStats — acquire wallet first
-    const wallet = input.walletRange
-      ? walletPool.acquireWalletInRange(input.walletRange.from, input.walletRange.to)
-      : walletPool.acquireWallet();
-    if (!wallet) {
-      const rangeMsg = input.walletRange
-        ? ` in wallet range ${input.walletRange.from}-${input.walletRange.to}`
-        : '';
-      return fail(`No available wallets${rangeMsg}. All wallets are busy.`);
-    }
-
-    updateJobStatus(jobId, 'PROCESSING', {
-      wallet_address: wallet.address,
-      seadrop_address: seaDropTarget.address,
-    });
-
+    // ===== SINGLE-WALLET MINT (original behavior) =====
+    updateJobStatus(jobId, 'PROCESSING');
     if (onStatusUpdate) {
       await onStatusUpdate(jobId, 'processing');
     }
 
-    try {
-      const mintConfig = await readMintConfig(
-        contractAddress,
-        seaDropTarget.address,
-        wallet.address,
-        seaDropTarget.publicDrop // publicDrop passed from detector — no re-fetch
-      );
+    const result = await executeSingleWalletMint(
+      input,
+      collection,
+      contractAddress,
+      null,
+      onStatusUpdate
+    );
 
-      // Step 6: Validate time window
-      const now = BigInt(Math.floor(Date.now() / 1000));
-      if (mintConfig.publicDrop.startTime > now) {
-        walletPool.releaseWallet(wallet.address);
-        return fail(
-          `Mint has not started yet. Starts at ${new Date(Number(mintConfig.publicDrop.startTime) * 1000).toUTCString()}`
-        );
-      }
-      if (mintConfig.publicDrop.endTime > 0n && mintConfig.publicDrop.endTime < now) {
-        walletPool.releaseWallet(wallet.address);
-        return fail('Mint has ended');
-      }
-
-      // Step 7: Validate supply
-      if (
-        mintConfig.mintStats.maxSupply > 0n &&
-        mintConfig.mintStats.currentTotalSupply >= mintConfig.mintStats.maxSupply
-      ) {
-        walletPool.releaseWallet(wallet.address);
-        return fail('Mint supply is exhausted');
-      }
-
-      // Step 8: Validate per-wallet mint limit (FIXED: abort if limit reached)
-      const remainingMints =
-        mintConfig.publicDrop.maxTotalMintableByWallet -
-        Number(mintConfig.mintStats.minterNumMinted);
-
-      if (remainingMints <= 0) {
-        walletPool.releaseWallet(wallet.address);
-        return fail(
-          `Wallet ${wallet.address.slice(0, 8)}... has already reached the max mint limit ` +
-          `(${mintConfig.publicDrop.maxTotalMintableByWallet}) for this collection`
-        );
-      }
-
-      const quantity = input.forceMaxQuantity
-        ? remainingMints
-        : Math.min(userSettings.quantity, remainingMints);
-
-      // Step 9: Validate mint price
-      const mintPriceEth = formatEther(mintConfig.publicDrop.mintPrice);
-      const parsedMaxPrice = parseFloat(userSettings.max_mint_price_eth);
-      const userMaxPriceWei = BigInt(Math.floor((isNaN(parsedMaxPrice) ? 0 : parsedMaxPrice) * 1e18));
-      if (mintConfig.publicDrop.mintPrice > userMaxPriceWei) {
-        walletPool.releaseWallet(wallet.address);
-        return fail(
-          `Mint price (${mintPriceEth} ETH) exceeds your max price limit ` +
-          `(${userSettings.max_mint_price_eth} ETH). Use /set_maxprice to increase.`
-        );
-      }
-
-      updateJobStatus(jobId, 'PROCESSING', { mint_price_eth: mintPriceEth });
-
-      // Step 10: Build calldata
-      // tx.to = SeaDrop contract, nftContract = first arg in mintPublic()
-      const calldata = buildMintCalldata(mintConfig, quantity, wallet.address);
-
-      // Step 11: Estimate gas
-      let gasEstimate;
-      try {
-        gasEstimate = await estimateGas(calldata, wallet.address, userSettings.max_gas_eth, userSettings.priority_fee_gwei);
-      } catch (err) {
-        walletPool.releaseWallet(wallet.address);
-        return fail(err instanceof Error ? err.message : 'Gas estimation failed');
-      }
-
-      // Step 12: Send transaction
-      const privateKey = walletPool.getPrivateKey(wallet.address);
-      if (!privateKey) {
-        walletPool.releaseWallet(wallet.address);
-        return fail('Could not retrieve wallet private key');
-      }
-
-      let txHash: `0x${string}`;
-      try {
-        const result = await sendMintTransaction(calldata, privateKey, gasEstimate);
-        txHash = result.txHash;
-      } catch (err) {
-        walletPool.releaseWallet(wallet.address);
-        return fail(err instanceof Error ? err.message : 'Failed to send transaction');
-      }
-
-      updateJobStatus(jobId, 'PROCESSING', { tx_hash: txHash });
-
-      if (onStatusUpdate) {
-        await onStatusUpdate(jobId, 'monitoring');
-      }
-
-      // Step 13: Monitor transaction — wallet released AFTER confirm/fail
-      const monitorResult = await monitorTransaction(txHash, contractAddress);
-      walletPool.releaseWallet(wallet.address);
-
-      if (monitorResult.status === 'CONFIRMED') {
-        updateJobStatus(jobId, 'CONFIRMED', {
-          tx_hash: txHash,
-          token_ids: monitorResult.tokenIds,
-          gas_used_eth: monitorResult.gasUsedEth,
-        });
-        logAction(telegramId, 'MINT_CONFIRMED', { jobId, txHash });
-        return {
-          jobId,
-          status: 'CONFIRMED',
-          txHash,
-          tokenIds: monitorResult.tokenIds,
-          gasUsedEth: monitorResult.gasUsedEth,
-          collectionName: collection.collectionName,
-        };
-      } else {
-        updateJobStatus(jobId, monitorResult.status, {
-          tx_hash: txHash,
-          error_message:
-            monitorResult.status === 'DROPPED'
-              ? 'Transaction timed out — check Etherscan for status'
-              : 'Transaction reverted on-chain',
-        });
-        return {
-          jobId,
-          status: monitorResult.status,
-          txHash,
-          errorMessage:
-            monitorResult.status === 'DROPPED'
-              ? 'Transaction timed out — check Etherscan for status'
-              : 'Transaction reverted on-chain',
-          collectionName: collection.collectionName,
-        };
-      }
-    } catch (err) {
-      walletPool.releaseWallet(wallet.address);
-      throw err;
+    if (result.status === 'CONFIRMED') {
+      updateJobStatus(jobId, 'CONFIRMED', {
+        tx_hash: result.txHash,
+        token_ids: result.tokenIds,
+        gas_used_eth: result.gasUsedEth,
+      });
+      logAction(telegramId, 'MINT_CONFIRMED', { jobId, txHash: result.txHash });
+      return {
+        jobId,
+        status: 'CONFIRMED',
+        txHash: result.txHash,
+        tokenIds: result.tokenIds,
+        gasUsedEth: result.gasUsedEth,
+        collectionName: collection.collectionName,
+      };
+    } else {
+      updateJobStatus(jobId, result.status, {
+        tx_hash: result.txHash,
+        error_message: result.errorMessage,
+      });
+      return {
+        jobId,
+        status: result.status,
+        txHash: result.txHash,
+        errorMessage: result.errorMessage,
+        collectionName: collection.collectionName,
+      };
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unexpected error';

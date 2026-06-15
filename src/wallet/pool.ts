@@ -98,6 +98,43 @@ class WalletPool {
     return null;
   }
 
+  /**
+   * Acquire a specific wallet by 1-based index.
+   * Returns null if wallet doesn't exist or is busy.
+   */
+  public acquireWalletByIndex(index: number): WalletEntry | null {
+    this.ensureInitialized();
+    const entries = Array.from(this.wallets.values());
+    if (index < 1 || index > entries.length) {
+      logger.warn(`[WALLET] Wallet index ${index} out of range (1-${entries.length})`);
+      return null;
+    }
+
+    const wallet = entries[index - 1];
+    if (!wallet) return null;
+
+    if (wallet.status === 'BUSY') {
+      logger.warn(`[WALLET] Wallet #${index} ${wallet.address.slice(0, 8)}... is busy`);
+      return null;
+    }
+
+    wallet.status = 'BUSY';
+    logger.info(`[WALLET] Acquired wallet #${index} ${wallet.address.slice(0, 8)}...`);
+    return wallet;
+  }
+
+  /**
+   * Get wallet info by 1-based index (does not acquire).
+   */
+  public getWalletByIndex(index: number): WalletEntry | null {
+    this.ensureInitialized();
+    const entries = Array.from(this.wallets.values());
+    if (index < 1 || index > entries.length) {
+      return null;
+    }
+    return entries[index - 1] ?? null;
+  }
+
   public releaseWallet(address: Address): void {
     const wallet = this.wallets.get(address);
     if (wallet) {
