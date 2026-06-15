@@ -27,6 +27,10 @@ const envSchema = z.object({
   TX_TIMEOUT_SECONDS: z.string().default('300'),
   QUEUE_CONCURRENCY: z.string().default('10'),
 
+  // Multi-wallet mint concurrency (how many wallets mint in parallel)
+  MULTI_WALLET_CONCURRENCY: z.string().default('5'),
+  MULTI_WALLET_PROGRESS_INTERVAL: z.string().default('10'),
+
   // Rate limiting
   RATE_LIMIT_MAX: z.string().default('5'),
   RATE_LIMIT_WINDOW_MS: z.string().default('60000'),
@@ -89,6 +93,8 @@ export const config = {
     txTimeoutSeconds: parseInt(env.TX_TIMEOUT_SECONDS, 10),
     queueConcurrency: parseInt(env.QUEUE_CONCURRENCY, 10),
     dryRunMode: env.DRY_RUN_MODE === 'true',
+    multiWalletConcurrency: parseInt(env.MULTI_WALLET_CONCURRENCY, 10),
+    multiWalletProgressInterval: parseInt(env.MULTI_WALLET_PROGRESS_INTERVAL, 10),
   },
   rateLimit: {
     max: parseInt(env.RATE_LIMIT_MAX, 10),

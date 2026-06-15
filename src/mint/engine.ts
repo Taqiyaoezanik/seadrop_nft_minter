@@ -1,4 +1,5 @@
 import { formatEther, getAddress } from 'viem';
+import PQueue from 'p-queue';
 import { parseOpenSeaUrl } from './urlParser';
 import { resolveCollection } from './collectionResolver';
 import { detectActiveSeaDrop } from './seadropDetector';
@@ -344,54 +345,85 @@ export async function runMintJob(
       return fail(validationError);
     }
 
-    // ===== MULTI-WALLET LOOP SUPPORT =====
+    // ===== MULTI-WALLET CONCURRENT MINT =====
     if (input.walletRange) {
       const { from, to } = input.walletRange;
       const walletCount = to - from + 1;
-      logger.info(`[ENGINE] Multi-wallet mint: executing ${walletCount} mints (wallets ${from}-${to})`);
+      logger.info(`[ENGINE] Multi-wallet mint: executing ${walletCount} mints (wallets ${from}-${to}) with concurrency ${config.mint.multiWalletConcurrency}`);
 
       const walletResults: NonNullable<MintEngineResult['walletResults']> = [];
+      const queue = new PQueue({ concurrency: config.mint.multiWalletConcurrency });
+      let completedCount = 0;
 
-      for (let i = from; i <= to; i++) {
-        logger.info(`[ENGINE] Processing wallet ${i}/${to}`);
-
-        try {
-          const result = await executeSingleWalletMint(
-            input,
-            collection,
-            contractAddress,
-            i,
-            onStatusUpdate
-          );
-
-          const wallet = walletPool.getWalletByIndex(i);
-          walletResults.push({
-            walletIndex: i,
-            walletAddress: wallet?.address ?? 'unknown',
-            status: result.status,
-            txHash: result.txHash,
-            tokenIds: result.tokenIds,
-            gasUsedEth: result.gasUsedEth,
-            errorMessage: result.errorMessage,
-          });
-
-          if (result.status === 'CONFIRMED') {
-            logger.info(`[ENGINE] Wallet ${i} mint CONFIRMED: ${result.txHash}`);
-          } else {
-            logger.warn(`[ENGINE] Wallet ${i} mint ${result.status}: ${result.errorMessage}`);
-          }
-        } catch (err) {
-          const wallet = walletPool.getWalletByIndex(i);
-          const errorMsg = err instanceof Error ? err.message : 'Unknown error';
-          logger.error(`[ENGINE] Wallet ${i} mint error: ${errorMsg}`);
-          walletResults.push({
-            walletIndex: i,
-            walletAddress: wallet?.address ?? 'unknown',
-            status: 'FAILED',
-            errorMessage: errorMsg,
-          });
+      // Progress reporting interval
+      const progressInterval = setInterval(() => {
+        if (completedCount > 0 && completedCount < walletCount) {
+          logger.info(`[ENGINE] Progress: ${completedCount}/${walletCount} wallets processed`);
         }
+      }, config.mint.multiWalletProgressInterval * 1000);
+
+      const tasks = [];
+      for (let i = from; i <= to; i++) {
+        const walletIndex = i;
+        const task = queue.add(async () => {
+          logger.info(`[ENGINE] Processing wallet ${walletIndex}/${to}`);
+
+          try {
+            const result = await executeSingleWalletMint(
+              input,
+              collection,
+              contractAddress,
+              walletIndex,
+              onStatusUpdate
+            );
+
+            const wallet = walletPool.getWalletByIndex(walletIndex);
+            const walletResult = {
+              walletIndex,
+              walletAddress: wallet?.address ?? 'unknown',
+              status: result.status,
+              txHash: result.txHash,
+              tokenIds: result.tokenIds,
+              gasUsedEth: result.gasUsedEth,
+              errorMessage: result.errorMessage,
+            };
+            walletResults.push(walletResult);
+
+            completedCount++;
+
+            if (result.status === 'CONFIRMED') {
+              logger.info(`[ENGINE] Wallet ${walletIndex} mint CONFIRMED: ${result.txHash}`);
+            } else {
+              logger.warn(`[ENGINE] Wallet ${walletIndex} mint ${result.status}: ${result.errorMessage}`);
+            }
+
+            return walletResult;
+          } catch (err) {
+            const wallet = walletPool.getWalletByIndex(walletIndex);
+            const errorMsg = err instanceof Error ? err.message : 'Unknown error';
+            logger.error(`[ENGINE] Wallet ${walletIndex} mint error: ${errorMsg}`);
+            const walletResult = {
+              walletIndex,
+              walletAddress: wallet?.address ?? 'unknown',
+              status: 'FAILED' as const,
+              errorMessage: errorMsg,
+            };
+            walletResults.push(walletResult);
+            completedCount++;
+            return walletResult;
+          }
+        });
+        tasks.push(task);
       }
+
+      // Wait for all tasks to complete
+      await Promise.all(tasks);
+      clearInterval(progressInterval);
+
+      logger.info(`[ENGINE] Multi-wallet mint complete: ${completedCount}/${walletCount} processed`);
+
+      // Sort results by wallet index
+      walletResults.sort((a, b) => a.walletIndex - b.walletIndex);
 
       // Aggregate results
       const successCount = walletResults.filter(r => r.status === 'CONFIRMED').length;
