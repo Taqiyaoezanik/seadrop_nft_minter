@@ -15,16 +15,19 @@ Jadwalkan mint untuk waktu tertentu.
 
 **Time Formats:**
 - `22:00` - 24-hour format (10 PM hari ini/besok)
-- `10:00 PM` - 12-hour format dengan AM/PM
-- `2024-06-13 22:00` - Full date time (YYYY-MM-DD HH:MM)
+- `10:00 PM` - 12-hour format dengan AM/PM (untuk hari ini/besok saja)
+- `"2024-06-13 22:00"` - Full date time (YYYY-MM-DD HH:MM) - **WAJIB pakai tanda kutip!**
 
 **Examples:**
 ```
 /schedule_mint https://opensea.io/collection/azuki 22:00
 /schedule_mint https://opensea.io/collection/azuki 10:00 PM
 /schedule_mint https://opensea.io/collection/azuki 22:00 1 5
-/schedule_mint https://opensea.io/collection/azuki "2024-06-13 22:00"
+/schedule_mint https://opensea.io/collection/azuki "2026-06-19 00:30"
+/schedule_mint https://opensea.io/collection/azuki "2026-06-19 10:00 PM" 1 5
 ```
+
+> ⚠️ **Penting:** Kalau pakai format full date (YYYY-MM-DD HH:MM), **WAJIB pakai tanda kutip** (`"..."`). Bot sudah support smart quotes dari mobile (" ") juga.
 
 **Wallet Range (Optional):**
 - `1` - hanya wallet #1
@@ -89,10 +92,12 @@ Bot support multiple time formats:
 
 1. **24-hour**: `22:00` → Today/tomorrow 22:00
 2. **12-hour**: `10:00 PM` → Today/tomorrow 22:00
-3. **Full datetime**: `2024-06-13 22:00` → Exact date & time
-4. **ISO string**: `2024-06-13T22:00:00Z` → UTC time
+3. **Full datetime**: `"2026-06-13 22:00"` → Exact date & time (quotes required!)
+4. **ISO string**: `"2024-06-13T22:00:00Z"` → UTC time (quotes required!)
 
 If time has passed today, automatically schedules for tomorrow.
+
+**Note:** Parser supports both regular quotes (`"`) and smart quotes (`"` `"`) from mobile keyboards.
 
 ## Usage Tips
 

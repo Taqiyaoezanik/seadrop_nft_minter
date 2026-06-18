@@ -30,7 +30,7 @@ An open source, self-hosted Telegram bot that automatically mints NFTs from Open
 
 ```bash
 # 1. Clone the repository
-git clone https://gitlab.com/oezank/seadrop_nft_minter.git
+git clone https://github.com/Taqiyaoezanik/seadrop_nft_minter.git
 cd seadrop_nft_minter
 
 # 2. Install dependencies
@@ -156,11 +156,12 @@ Schedule mints to execute automatically at a specific time - perfect for allowli
 # Schedule with wallet range (wallets 1-5)
 /schedule_mint https://opensea.io/collection/azuki 22:00 1 5
 
-# Use 12-hour format
+# Use 12-hour format (for same-day time only)
 /schedule_mint https://opensea.io/collection/azuki 10:00 PM
 
-# Full datetime
-/schedule_mint https://opensea.io/collection/azuki "2024-06-13 22:00"
+# Full datetime (MUST use quotes!)
+/schedule_mint https://opensea.io/collection/azuki "2026-06-19 00:30"
+/schedule_mint https://opensea.io/collection/azuki "2026-06-19 10:00 PM" 1 5
 
 # View all schedules
 /list_schedules
@@ -168,6 +169,8 @@ Schedule mints to execute automatically at a specific time - perfect for allowli
 # Cancel a schedule
 /cancel_schedule <schedule_id>
 ```
+
+> ⚠️ **Important:** When using full date format (YYYY-MM-DD HH:MM), you **MUST** wrap it in quotes. Mobile keyboards may use smart quotes (" ") which are also supported.
 
 **How it works:**
 - Bot checks every 30 seconds for due schedules
