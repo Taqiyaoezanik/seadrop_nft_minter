@@ -66,6 +66,36 @@ function parseScheduledTime(timeStr: string): Date | null {
 }
 
 /**
+ * Parse command text respecting quoted strings
+ */
+function parseCommandArgs(text: string): string[] {
+  const parts: string[] = [];
+  let current = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+
+    if (char === '"' || char === '"' || char === '"') { // Handle smart quotes from mobile
+      inQuotes = !inQuotes;
+    } else if (char === ' ' && !inQuotes) {
+      if (current) {
+        parts.push(current);
+        current = '';
+      }
+    } else {
+      current += char;
+    }
+  }
+
+  if (current) {
+    parts.push(current);
+  }
+
+  return parts;
+}
+
+/**
  * /schedule_mint <url> <time> [wallet_from] [wallet_to]
  */
 export async function scheduleMintCommand(ctx: Context): Promise<void> {
@@ -74,7 +104,7 @@ export async function scheduleMintCommand(ctx: Context): Promise<void> {
   getOrCreateUser(telegramId, username);
 
   const text = ctx.message && 'text' in ctx.message ? ctx.message.text : '';
-  const parts = text.trim().split(/\s+/);
+  const parts = parseCommandArgs(text.trim());
 
   if (parts.length < 3) {
     await ctx.reply(
